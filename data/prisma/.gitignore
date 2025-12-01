@@ -1,0 +1,3 @@
+# Prisma database directory
+*.db
+*.db-journal

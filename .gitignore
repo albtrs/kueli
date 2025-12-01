@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+app/node_modules/
+
+# Next.js
+app/.next/
+app/out/
+
+# Application Data (Persistent)
+data/prisma/*.db
+data/prisma/*.db-journal
+data/uploads/*
+!data/uploads/.gitignore
+!data/prisma/.gitignore
+
+# Environment Variables
+.env
+.env.local
+.env*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
