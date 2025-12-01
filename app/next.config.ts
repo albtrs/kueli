@@ -7,9 +7,9 @@ const nextConfig: NextConfig = {
   // Turbopack設定（空でもOK、警告を消すため）
   turbopack: {},
   
-  // CORS警告を解消
+  // devIndicators設定
   devIndicators: {
-    buildActivityPosition: 'bottom-right',
+    position: 'bottom-right',
   },
   
   // Image最適化の設定

@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signOut } from 'next-auth/react';
-import { saveNote } from '@/actions/note';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { LogOut, X, Search, Plus } from 'lucide-react';
@@ -15,7 +14,6 @@ export function DashboardHeader() {
   const currentQuery = searchParams.get('q') || '';
   
   const [searchQuery, setSearchQuery] = useState(currentQuery);
-  const [isCreating, setIsCreating] = useState(false);
 
   const handleLogout = async () => {
     await signOut({ redirect: false });
@@ -40,22 +38,8 @@ export function DashboardHeader() {
     router.push('/');
   };
 
-  const handleCreateNote = async () => {
-    if (isCreating) return;
-    setIsCreating(true);
-    try {
-      const newNote = await saveNote(null, {
-        title: '無題のメモ',
-        content: '',
-        isPinned: false,
-        tags: [],
-      });
-      router.push(`/notes/${newNote.id}`);
-    } catch (err) {
-      console.error('Failed to create note:', err);
-    } finally {
-      setIsCreating(false);
-    }
+  const handleCreateNote = () => {
+    router.push('/notes/new');
   };
 
   const hasFilters = selectedTag || currentQuery;
@@ -101,8 +85,7 @@ export function DashboardHeader() {
         <Button 
           variant="default" 
           size="icon" 
-          onClick={handleCreateNote} 
-          disabled={isCreating}
+          onClick={handleCreateNote}
           className="h-9 w-9"
           title="新規メモ"
         >

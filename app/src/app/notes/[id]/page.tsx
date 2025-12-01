@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import dynamic from 'next/dynamic';
-import { getNote, saveNote as saveNoteAction, deleteNote } from '@/actions/note';
+import { getNote, getNotes, saveNote as saveNoteAction, deleteNote } from '@/actions/note';
 import { Note } from '@/lib/types';
 import { extractTags } from '@/lib/utils';
 import { createTableTemplate, convertTsvToMd, formatMarkdownTable, findTableRange } from '@/lib/table-utils';
@@ -15,6 +15,7 @@ import { LinkPreview } from '@/components/LinkPreview';
 import { ArrowLeft, Loader2, Check, Upload, Table, Wand2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkWikiLink from 'remark-wiki-link';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 
 // CodeMirrorは動的インポート（SSR無効化）
@@ -28,6 +29,57 @@ const getMarkdownExtension = async () => {
   const { markdown } = await import('@codemirror/lang-markdown');
   const { languages } = await import('@codemirror/language-data');
   return markdown({ codeLanguages: languages });
+};
+
+// Wikiリンク用オートコンプリート
+const getWikiLinkCompletion = async (noteTitles: string[]) => {
+  const { autocompletion } = await import('@codemirror/autocomplete');
+  
+  return autocompletion({
+    activateOnTyping: true,
+    override: [
+      (context: any) => {
+        const line = context.state.doc.lineAt(context.pos);
+        const textBefore = line.text.slice(0, context.pos - line.from);
+        const textAfter = line.text.slice(context.pos - line.from);
+        
+        // [[ の後にいるかチェック
+        const match = textBefore.match(/\[\[([^\]]*)$/);
+        if (!match) return null;
+        
+        const query = match[1].toLowerCase();
+        const from = context.pos - match[1].length;
+        
+        // 後ろに ]] があるかチェック
+        const hasClosingBrackets = textAfter.startsWith(']]');
+        
+        // フィルタリング
+        const options = noteTitles
+          .filter(t => t.toLowerCase().includes(query))
+          .map(title => ({
+            label: title,
+            // apply を関数にして、後ろの ]] を考慮
+            apply: (view: any, completion: any, from: number, to: number) => {
+              // 常に title + ']]' を挿入
+              const insertText = title + ']]';
+              // 後ろに ]] がある場合はそれも含めて削除
+              const deleteTo = hasClosingBrackets ? to + 2 : to;
+              view.dispatch({
+                changes: { from, to: deleteTo, insert: insertText },
+                selection: { anchor: from + insertText.length },
+              });
+            },
+          }));
+        
+        if (options.length === 0) return null;
+        
+        return {
+          from,
+          options,
+        };
+      },
+    ],
+  });
 };
 
 type SaveStatus = 'saved' | 'saving' | 'unsaved';
@@ -48,16 +100,36 @@ export default function EditorPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [defaultTab, setDefaultTab] = useState<'write' | 'preview'>('write');
   const [editorReady, setEditorReady] = useState(false);
+  const [allNotes, setAllNotes] = useState<Note[]>([]);
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
 
-  // Markdownエクステンションを読み込み
-  useEffect(() => {
-    getMarkdownExtension().then((ext) => {
-      setExtensions([ext]);
+  // タイトル → ID のマッピング辞書（Wikiリンク用）
+  const permalinks = useMemo(() => {
+    const map: Record<string, string> = {};
+    allNotes.forEach(n => {
+      if (n.title) {
+        map[n.title] = n.id;
+      }
     });
-  }, []);
+    return map;
+  }, [allNotes]);
+
+  // ノートタイトル一覧（オートコンプリート用）
+  const noteTitles = useMemo(() => {
+    return allNotes.map(n => n.title).filter(Boolean);
+  }, [allNotes]);
+
+  // Markdownエクステンションを読み込み（ノートタイトルが更新されたら再読み込み）
+  useEffect(() => {
+    const loadExtensions = async () => {
+      const markdownExt = await getMarkdownExtension();
+      const wikiLinkExt = await getWikiLinkCompletion(noteTitles);
+      setExtensions([markdownExt, wikiLinkExt]);
+    };
+    loadExtensions();
+  }, [noteTitles]);
 
   // ノートを取得
   useEffect(() => {
@@ -74,7 +146,11 @@ export default function EditorPage() {
 
     const fetchNote = async () => {
       try {
-        const record = await getNote(noteId);
+        // 現在のノートと全ノート（Wikiリンク用）を並列で取得
+        const [record, notes] = await Promise.all([
+          getNote(noteId),
+          getNotes()
+        ]);
         
         if (!record) {
           if (isMounted) {
@@ -87,6 +163,7 @@ export default function EditorPage() {
           setNote(record);
           setTitle(record.title);
           setContent(record.content || '');
+          setAllNotes(notes);
           // コンテンツがある場合はプレビュー、ない場合は編集をデフォルトに
           setDefaultTab(record.content ? 'preview' : 'write');
         }
@@ -416,7 +493,23 @@ export default function EditorPage() {
     img: ({ node, ...props }: any) => (
       <MediaRenderer src={props.src} alt={props.alt} />
     ),
-    a: ({ node, href, children, ...props }: any) => {
+    a: ({ node, href, children, className, ...props }: any) => {
+      // Wikiリンクの場合（remark-wiki-linkが付与するクラス）
+      const isWikiLink = className?.includes('internal');
+      const isNewWikiLink = className?.includes('new');
+      
+      if (isWikiLink) {
+        return (
+          <a
+            href={href}
+            className={isNewWikiLink ? 'wiki-link-new' : 'wiki-link'}
+            {...props}
+          >
+            {children}
+          </a>
+        );
+      }
+      
       // 外部リンクの場合はプレビューを表示
       const isExternal = href?.startsWith('http://') || href?.startsWith('https://');
       
@@ -435,6 +528,19 @@ export default function EditorPage() {
       );
     },
   };
+
+  // remarkWikiLink の設定
+  const wikiLinkOptions = useMemo(() => ({
+    permalinks: Object.keys(permalinks),
+    pageResolver: (name: string) => [name],
+    hrefTemplate: (permalink: string) => {
+      const id = permalinks[permalink];
+      return id ? `/notes/${id}` : `/notes/new?title=${encodeURIComponent(permalink)}`;
+    },
+    wikiLinkClassName: 'internal wiki-link',
+    newClassName: 'new',
+    aliasDivider: '|',
+  }), [permalinks]);
 
   if (isLoading) {
     return (
@@ -571,7 +677,7 @@ export default function EditorPage() {
             <div className="prose prose-base dark:prose-invert max-w-none rounded border border-input p-4" style={{ fontFamily: 'var(--font-noto-sans-jp), sans-serif' }}>
               {content ? (
                 <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
+                  remarkPlugins={[remarkGfm, [remarkWikiLink, wikiLinkOptions]]}
                   components={markdownComponents}
                   unwrapDisallowed={true}
                 >
