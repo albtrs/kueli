@@ -6,6 +6,15 @@ import { revalidatePath } from 'next/cache'
 import { Note, NoteCreateData, NoteUpdateData } from '@/lib/types'
 import { UnauthorizedError, NotFoundError, handleServerActionError } from '@/lib/errors'
 
+// ページネーション結果の型
+export interface NotesPageResult {
+  notes: Note[]
+  nextCursor: string | null
+  hasMore: boolean
+}
+
+const DEFAULT_PAGE_SIZE = 20
+
 // Helper: Parse JSON fields
 function parseNote(dbNote: any): Note {
   return {
@@ -17,6 +26,67 @@ function parseNote(dbNote: any): Note {
     images: JSON.parse(dbNote.images || '[]'),
     createdAt: dbNote.createdAt,
     updatedAt: dbNote.updatedAt,
+  }
+}
+
+/**
+ * ノートをページネーションで取得（Client Component 用 Server Action）
+ * @param cursor - 前回の最後のノートID（初回はnull）
+ * @param limit - 取得件数（デフォルト20）
+ * @param tag - タグでフィルタ（オプション）
+ * @param search - 検索クエリ（オプション）
+ */
+export async function fetchNotesPage(
+  cursor: string | null = null,
+  limit: number = DEFAULT_PAGE_SIZE,
+  tag?: string,
+  search?: string
+): Promise<NotesPageResult> {
+  try {
+    const session = await auth()
+    if (!session?.user) {
+      throw new UnauthorizedError()
+    }
+
+    // 1件多く取得して hasMore を判定
+    const take = limit + 1
+
+    // フィルタ条件を構築
+    const where: any = {}
+    
+    if (tag) {
+      where.tags = { contains: `"${tag}"` }
+    }
+    
+    if (search) {
+      where.OR = [
+        { title: { contains: search } },
+        { content: { contains: search } },
+      ]
+    }
+
+    const notes = await prisma.note.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      take,
+      ...(cursor && {
+        skip: 1,
+        cursor: { id: cursor },
+      }),
+    })
+
+    const hasMore = notes.length > limit
+    const resultNotes = hasMore ? notes.slice(0, limit) : notes
+    const nextCursor = hasMore ? resultNotes[resultNotes.length - 1]?.id : null
+
+    return {
+      notes: resultNotes.map(parseNote),
+      nextCursor,
+      hasMore,
+    }
+  } catch (error) {
+    console.error('fetchNotesPage error:', handleServerActionError(error))
+    throw error
   }
 }
 

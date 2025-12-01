@@ -1,27 +1,120 @@
 'use client';
 
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Note } from '@/lib/types';
+import { fetchNotesPage } from '@/actions/note';
 import { formatDateJST, stripMarkdown } from '@/lib/utils';
 import { extractYouTubeThumbnail, extractTweetId, extractFirstExternalLink } from '@/lib/media-utils';
 import { extractFirstMedia } from '@/lib/file-utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Play, Link as LinkIcon } from 'lucide-react';
+import { Play, Link as LinkIcon, Loader2 } from 'lucide-react';
 
-export function NoteGrid({ notes }: { notes: Note[] }) {
+interface NoteGridProps {
+  // 従来の静的表示用（ピン留めセクションなど）
+  notes?: Note[];
+  // 無限スクロール用
+  initialNotes?: Note[];
+  initialCursor?: string | null;
+  initialHasMore?: boolean;
+  tag?: string;
+  search?: string;
+}
+
+export function NoteGrid({ 
+  notes,
+  initialNotes,
+  initialCursor,
+  initialHasMore = false,
+  tag,
+  search,
+}: NoteGridProps) {
   const router = useRouter();
+  
+  // 無限スクロールモードかどうか
+  const isInfiniteMode = initialNotes !== undefined;
+  
+  // 無限スクロール用の状態
+  const [displayNotes, setDisplayNotes] = useState<Note[]>(initialNotes || notes || []);
+  const [cursor, setCursor] = useState<string | null>(initialCursor || null);
+  const [hasMore, setHasMore] = useState(initialHasMore);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Intersection Observer 用の ref
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  
+  // 追加読み込み
+  const loadMore = useCallback(async () => {
+    if (!isInfiniteMode || isLoading || !hasMore) return;
+    
+    setIsLoading(true);
+    try {
+      const result = await fetchNotesPage(cursor, 20, tag, search);
+      setDisplayNotes(prev => [...prev, ...result.notes]);
+      setCursor(result.nextCursor);
+      setHasMore(result.hasMore);
+    } catch (error) {
+      console.error('Failed to load more notes:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isInfiniteMode, isLoading, hasMore, cursor, tag, search]);
+  
+  // Intersection Observer で自動読み込み
+  useEffect(() => {
+    if (!isInfiniteMode || !hasMore) return;
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isLoading) {
+          loadMore();
+        }
+      },
+      { threshold: 0.1, rootMargin: '100px' }
+    );
+    
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current);
+    }
+    
+    return () => observer.disconnect();
+  }, [isInfiniteMode, hasMore, isLoading, loadMore]);
+  
+  // タグや検索が変わったらリセット（page.tsx 側で initialNotes が変わる）
+  useEffect(() => {
+    if (initialNotes) {
+      setDisplayNotes(initialNotes);
+      setCursor(initialCursor || null);
+      setHasMore(initialHasMore);
+    }
+  }, [initialNotes, initialCursor, initialHasMore]);
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {notes.map((note) => (
-        <NoteCard
-          key={note.id}
-          note={note}
-          onClick={() => router.push(`/notes/${note.id}`)}
-        />
-      ))}
-    </div>
+    <>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {displayNotes.map((note) => (
+          <NoteCard
+            key={note.id}
+            note={note}
+            onClick={() => router.push(`/notes/${note.id}`)}
+          />
+        ))}
+      </div>
+      
+      {/* 無限スクロールのトリガー要素 */}
+      {isInfiniteMode && hasMore && (
+        <div ref={loadMoreRef} className="flex justify-center py-8">
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm">読み込み中...</span>
+            </div>
+          ) : (
+            <div className="h-8" />
+          )}
+        </div>
+      )}
+    </>
   );
 }
 

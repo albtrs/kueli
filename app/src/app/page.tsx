@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { auth } from '@/lib/auth';
-import { getNotes } from '@/lib/queries';
+import { getNotesPage, getNotes } from '@/lib/queries';
 import { Sidebar } from '@/components/Sidebar';
 import { DashboardHeader } from '@/components/DashboardHeader';
 import { NoteGrid } from '@/components/NoteGrid';
@@ -23,29 +23,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const selectedTag = params.tag;
   const searchQuery = params.q;
 
-  // Server Componentでデータ取得
+  // ピン留めノートは全件取得（数が少ないため）
   const allNotes = await getNotes();
+  const pinnedNotes = allNotes.filter((note) => note.isPinned);
   
-  // フィルタリング
-  let filtered = allNotes;
-  
-  // タグでフィルタリング
-  if (selectedTag) {
-    filtered = filtered.filter((note) => note.tags.includes(selectedTag));
-  }
-  
-  // 全文検索
-  if (searchQuery) {
-    const query = searchQuery.toLowerCase();
-    filtered = filtered.filter((note) => 
-      note.title.toLowerCase().includes(query) ||
-      note.content.toLowerCase().includes(query)
-    );
-  }
-
-  // ピン留めと通常のメモに分ける
-  const pinnedNotes = filtered.filter((note) => note.isPinned);
-  const recentNotes = filtered;
+  // 最近のノートはページネーションで取得（初期20件）
+  const initialPage = await getNotesPage(null, 20, selectedTag, searchQuery);
 
   return (
     <div className="flex min-h-screen">
@@ -72,18 +55,24 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               </section>
             )}
 
-            {/* 最近のメモセクション */}
+            {/* 最近のメモセクション（無限スクロール対応） */}
             <section>
               <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
                 <Clock className="h-4 w-4" /> 最近更新
               </h2>
-              {recentNotes.length === 0 ? (
+              {initialPage.notes.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <FileText className="h-10 w-10 text-muted-foreground mb-3" />
                   <p className="text-muted-foreground text-sm">メモがありません</p>
                 </div>
               ) : (
-                <NoteGrid notes={recentNotes} />
+                <NoteGrid 
+                  initialNotes={initialPage.notes}
+                  initialCursor={initialPage.nextCursor}
+                  initialHasMore={initialPage.hasMore}
+                  tag={selectedTag}
+                  search={searchQuery}
+                />
               )}
             </section>
           </div>
