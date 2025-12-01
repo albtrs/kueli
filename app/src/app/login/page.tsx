@@ -48,18 +48,18 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
+    <div className="flex min-h-screen items-center justify-center p-4 bg-muted/30">
       <Card className="w-full max-w-sm">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">ログイン</CardTitle>
-          <CardDescription>
-            メモアプリにログインしてください
+        <CardHeader className="text-center pb-4">
+          <CardTitle className="text-xl">Kueli</CardTitle>
+          <CardDescription className="text-xs">
+            ログインしてください
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">メールアドレス</Label>
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="email" className="text-xs">メールアドレス</Label>
               <Input
                 id="email"
                 type="email"
@@ -68,10 +68,11 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={isLoading}
+                className="h-9"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">パスワード</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="password" className="text-xs">パスワード</Label>
               <Input
                 id="password"
                 type="password"
@@ -80,12 +81,13 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
+                className="h-9"
               />
             </div>
             {error && (
-              <p className="text-sm text-destructive">{error}</p>
+              <p className="text-xs text-destructive">{error}</p>
             )}
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="w-full h-9" disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -11,6 +11,7 @@ import { createTableTemplate, convertTsvToMd, formatMarkdownTable, findTableRang
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { LinkPreview } from '@/components/LinkPreview';
 import { ArrowLeft, Loader2, Check, Upload, Table, Wand2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -415,6 +416,24 @@ export default function EditorPage() {
     img: ({ node, ...props }: any) => (
       <MediaRenderer src={props.src} alt={props.alt} />
     ),
+    a: ({ node, href, children, ...props }: any) => {
+      // 外部リンクの場合はプレビューを表示
+      const isExternal = href?.startsWith('http://') || href?.startsWith('https://');
+      
+      return (
+        <>
+          <a
+            href={href}
+            target={isExternal ? '_blank' : undefined}
+            rel={isExternal ? 'noopener noreferrer' : undefined}
+            {...props}
+          >
+            {children}
+          </a>
+          {isExternal && <LinkPreview href={href} />}
+        </>
+      );
+    },
   };
 
   if (isLoading) {
@@ -431,7 +450,7 @@ export default function EditorPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="flex h-14 items-center gap-2 px-6">
+          <div className="max-w-5xl mx-auto flex h-14 items-center gap-2 px-4 md:px-6">
             <Button variant="ghost" size="icon" onClick={() => router.push('/')}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
@@ -452,7 +471,7 @@ export default function EditorPage() {
               <Button variant="outline" size="sm" onClick={handleManualSave}>
                 保存
               </Button>
-              <Button variant="destructive" size="sm" onClick={handleDelete}>
+              <Button variant="destructive" size="sm" onClick={handleDelete} className="text-white">
                 削除
               </Button>
             </div>
@@ -460,9 +479,10 @@ export default function EditorPage() {
         </header>
 
         {/* Editor */}
-        <main className="flex-1 container mx-auto p-4">
-        <Tabs defaultValue={defaultTab} key={defaultTab} className="h-full">
-          <div className="flex items-center justify-between mb-4">
+        <main className="flex-1 overflow-hidden px-4 pb-4 md:px-6">
+        <div className="max-w-5xl mx-auto h-full">
+        <Tabs defaultValue={defaultTab} key={defaultTab} className="h-full flex flex-col">
+          <div className="flex items-center justify-between mb-3">
             <TabsList>
               <TabsTrigger value="write">編集</TabsTrigger>
               <TabsTrigger value="preview">プレビュー</TabsTrigger>
@@ -474,37 +494,39 @@ export default function EditorPage() {
             value={title}
             onChange={(e) => handleTitleChange(e.target.value)}
             placeholder="タイトル"
-            className="mb-4 text-2xl font-bold border-none focus-visible:ring-0 px-0"
+            className="mb-3 text-xl md:text-2xl font-bold border-none focus-visible:ring-0 px-0"
           />
 
-          <TabsContent value="write" className="h-[calc(100vh-180px)]">
+          <TabsContent value="write" className="flex-1 min-h-0 flex flex-col">
             {/* ツールバー */}
-            <div className="flex items-center gap-2 p-2 mb-2 bg-muted/50 rounded-md border">
+            <div className="flex flex-wrap items-center gap-1 md:gap-2 p-2 mb-2 bg-muted/30 rounded border text-xs md:text-sm">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleInsertTable}
                 title="3×3のテーブルを挿入"
+                className="h-7 px-2 md:h-8 md:px-3"
               >
-                <Table className="w-4 h-4 mr-2" />
-                テーブル挿入
+                <Table className="w-4 h-4 md:mr-1" />
+                <span className="hidden md:inline">テーブル</span>
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleFormatTable}
                 title="選択範囲またはカーソル位置のテーブルを整形"
+                className="h-7 px-2 md:h-8 md:px-3"
               >
-                <Wand2 className="w-4 h-4 mr-2" />
-                テーブル整形
+                <Wand2 className="w-4 h-4 md:mr-1" />
+                <span className="hidden md:inline">整形</span>
               </Button>
-              <div className="ml-auto text-xs text-muted-foreground">
-                Excel/スプレッドシートからコピペでテーブル作成可能
+              <div className="ml-auto text-xs text-muted-foreground hidden lg:block">
+                D&Dでファイル添付
               </div>
             </div>
 
             <div
-              className={`h-[calc(100%-60px)] rounded-lg border ${
+              className={`relative flex-1 min-h-0 rounded-sm border transition-colors overflow-hidden ${
                 isDragOver ? 'border-primary border-2 bg-primary/5' : 'border-input'
               }`}
               onDragOver={handleDragOver}
@@ -512,7 +534,7 @@ export default function EditorPage() {
               onDrop={handleDrop}
             >
               {isDragOver && (
-                <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 rounded-lg">
+                <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 rounded">
                   <div className="flex flex-col items-center gap-2 text-primary">
                     <Upload className="h-8 w-8" />
                     <span>ファイルをドロップ</span>
@@ -520,7 +542,7 @@ export default function EditorPage() {
                 </div>
               )}
               {isUploading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 rounded-lg">
+                <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 rounded">
                   <div className="flex flex-col items-center gap-2 text-primary">
                     <Loader2 className="h-8 w-8 animate-spin" />
                     <span>アップロード中...</span>
@@ -535,7 +557,7 @@ export default function EditorPage() {
                 onChange={handleContentChange}
                 onCreateEditor={() => setEditorReady(true)}
                 placeholder="Markdownで入力..."
-                className="h-full [&_.cm-editor]:h-full [&_.cm-scroller]:h-full"
+                className="h-full overflow-hidden [&_.cm-editor]:h-full [&_.cm-editor]:outline-none [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:h-full [&_.cm-scroller]:overflow-y-auto [&_.cm-scroller]:overflow-x-hidden [&_.cm-content]:py-2 [&_.cm-content]:px-3"
                 basicSetup={{
                   lineNumbers: false,
                   foldGutter: false,
@@ -545,8 +567,8 @@ export default function EditorPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="preview" className="h-[calc(100vh-180px)] overflow-auto">
-            <div className="prose prose-sm dark:prose-invert max-w-none rounded-lg border border-input p-4">
+          <TabsContent value="preview" className="flex-1 min-h-0 overflow-auto">
+            <div className="prose prose-base dark:prose-invert max-w-none rounded border border-input p-4" style={{ fontFamily: 'var(--font-noto-sans-jp), sans-serif' }}>
               {content ? (
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
@@ -561,6 +583,7 @@ export default function EditorPage() {
             </div>
           </TabsContent>
         </Tabs>
+        </div>
       </main>
       </div>
     </div>

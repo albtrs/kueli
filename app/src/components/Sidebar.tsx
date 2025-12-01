@@ -3,10 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { getNotes, saveNote } from '@/actions/note';
+import { getNotes } from '@/actions/note';
 import { Note } from '@/lib/types';
-import { Button } from '@/components/ui/button';
-import { FileText, Pin, Plus, Tag, Paperclip } from 'lucide-react';
+import { FileText, Pin, Tag, Paperclip, Menu, X } from 'lucide-react';
 
 interface TagViewRecord {
   id: string;
@@ -20,7 +19,7 @@ export function Sidebar() {
   const [tags, setTags] = useState<TagViewRecord[]>([]);
   const [pinnedNotes, setPinnedNotes] = useState<Note[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -69,23 +68,6 @@ export function Sidebar() {
     }
   };
 
-  const handleCreateNote = async () => {
-    setIsCreating(true);
-    try {
-      const newNote = await saveNote(null, {
-        title: '無題のメモ',
-        content: '',
-        isPinned: false,
-        tags: [],
-      });
-      router.push(`/notes/${newNote.id}`);
-    } catch (err) {
-      console.error('Failed to create note:', err);
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
   const handleTagClick = (tagName: string) => {
     // タグでフィルタリングした一覧ページへ遷移（実装は後で）
     router.push(`/?tag=${encodeURIComponent(tagName)}`);
@@ -93,35 +75,39 @@ export function Sidebar() {
 
   if (isLoading) {
     return (
-      <aside className="w-64 border-r bg-background p-4">
-        <div className="text-sm text-muted-foreground">読み込み中...</div>
-      </aside>
+      <>
+        {/* モバイル用ハンバーガーボタン */}
+        <button
+          className="fixed top-3 left-3 z-50 p-2 bg-background border rounded md:hidden"
+          onClick={() => setIsMobileOpen(true)}
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <aside className="hidden md:flex w-56 border-r bg-background p-4">
+          <div className="text-sm text-muted-foreground">読み込み中...</div>
+        </aside>
+      </>
     );
   }
 
-  return (
-    <aside className="w-64 border-r bg-background flex flex-col">
-      {/* ヘッダー */}
-      <div className="p-4 border-b">
-        <Button onClick={handleCreateNote} className="w-full" size="sm" disabled={isCreating}>
-          <Plus className="h-4 w-4 mr-2" />
-          新規メモ
-        </Button>
-      </div>
-
+  const sidebarContent = (
+    <>
       {/* ピン留めセクション */}
       {pinnedNotes.length > 0 && (
-        <div className="p-4 border-b">
-          <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-muted-foreground">
+        <div className="p-3 border-b">
+          <div className="flex items-center gap-2 mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
             <Pin className="h-3 w-3" />
             ピン留め
           </div>
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             {pinnedNotes.map(note => (
               <div
                 key={note.id}
-                className="flex items-center gap-2 py-1 px-2 hover:bg-muted rounded-md cursor-pointer"
-                onClick={() => router.push(`/notes/${note.id}`)}
+                className="flex items-center gap-2 py-1.5 px-2 hover:bg-muted rounded cursor-pointer"
+                onClick={() => {
+                  router.push(`/notes/${note.id}`);
+                  setIsMobileOpen(false);
+                }}
               >
                 <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <span className="text-sm truncate">{note.title || '無題'}</span>
@@ -132,20 +118,23 @@ export function Sidebar() {
       )}
 
       {/* タグセクション */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-muted-foreground">
+      <div className="flex-1 overflow-y-auto p-3">
+        <div className="flex items-center gap-2 mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
           <Tag className="h-3 w-3" />
           タグ
         </div>
         {tags.length === 0 ? (
           <div className="text-xs text-muted-foreground">タグはありません</div>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             {tags.map(tag => (
               <div
                 key={tag.id}
-                className="flex items-center justify-between py-1 px-2 hover:bg-muted rounded-md cursor-pointer group"
-                onClick={() => handleTagClick(tag.name)}
+                className="flex items-center justify-between py-1.5 px-2 hover:bg-muted rounded cursor-pointer"
+                onClick={() => {
+                  handleTagClick(tag.name);
+                  setIsMobileOpen(false);
+                }}
               >
                 <span className="text-sm">#{tag.name}</span>
                 <span className="text-xs text-muted-foreground">{tag.count}</span>
@@ -156,15 +145,60 @@ export function Sidebar() {
       </div>
 
       {/* 添付ファイル管理リンク */}
-      <div className="p-4 border-t">
+      <div className="p-3 border-t">
         <div
-          className="flex items-center gap-2 py-2 px-2 hover:bg-muted rounded-md cursor-pointer text-muted-foreground hover:text-foreground"
-          onClick={() => router.push('/attachments')}
+          className="flex items-center gap-2 py-1.5 px-2 hover:bg-muted rounded cursor-pointer text-muted-foreground hover:text-foreground"
+          onClick={() => {
+            router.push('/attachments');
+            setIsMobileOpen(false);
+          }}
         >
           <Paperclip className="h-4 w-4" />
-          <span className="text-sm">添付ファイル管理</span>
+          <span className="text-sm">添付ファイル</span>
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* モバイル用ハンバーガーボタン */}
+      <button
+        className="fixed top-3 left-3 z-50 p-2 bg-background border rounded md:hidden"
+        onClick={() => setIsMobileOpen(true)}
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      {/* モバイル用オーバーレイ */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+
+      {/* モバイル用サイドバー */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-background border-r transform transition-transform duration-200 md:hidden ${
+          isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="flex items-center justify-between p-3 border-b">
+          <span className="font-semibold">メニュー</span>
+          <button onClick={() => setIsMobileOpen(false)} className="p-1 hover:bg-muted rounded">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="flex flex-col h-[calc(100%-49px)]">
+          {sidebarContent}
+        </div>
+      </aside>
+
+      {/* デスクトップ用サイドバー */}
+      <aside className="hidden md:flex md:flex-col w-56 border-r bg-background">
+        {sidebarContent}
+      </aside>
+    </>
   );
 }

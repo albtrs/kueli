@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { notoSansJP } from "./fonts";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 
@@ -26,7 +27,7 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${notoSansJP.variable} antialiased text-base`}
       >
         <Providers>{children}</Providers>
       </body>

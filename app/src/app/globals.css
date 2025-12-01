@@ -45,7 +45,7 @@
 }
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0.25rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -119,5 +119,39 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-noto-sans-jp), var(--font-geist-sans), sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
   }
+}
+
+/* CodeMirrorのフォーカス時のアウトラインを無効化 */
+.cm-editor {
+  outline: none !important;
+}
+.cm-editor.cm-focused {
+  outline: none !important;
+}
+.cm-editor:focus {
+  outline: none !important;
+}
+.cm-editor:focus-visible {
+  outline: none !important;
+}
+.cm-content:focus {
+  outline: none !important;
+}
+.cm-content:focus-visible {
+  outline: none !important;
+}
+
+/* react-tweet のスタイル調整 */
+[data-theme="light"] .react-tweet-theme {
+  --tweet-bg-color: var(--background);
+  --tweet-border: 1px solid var(--border);
+}
+[data-theme="dark"] .react-tweet-theme,
+.dark .react-tweet-theme {
+  --tweet-bg-color: var(--background);
+  --tweet-border: 1px solid var(--border);
 }
