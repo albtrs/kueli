@@ -4,6 +4,18 @@ import { useRouter } from 'next/navigation';
 import { Note } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
+// 日付を一貫したフォーマットで表示（SSR/CSRの不一致を防ぐ）
+// UTCベースで計算し、タイムゾーンに依存しない
+function formatDate(date: Date): string {
+  const d = new Date(date);
+  const year = d.getUTCFullYear();
+  const month = d.getUTCMonth() + 1;
+  const day = d.getUTCDate();
+  // JSTはUTC+9なので、9時間足した値で計算
+  const jstDate = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  return `${jstDate.getUTCFullYear()}/${jstDate.getUTCMonth() + 1}/${jstDate.getUTCDate()}`;
+}
+
 // Markdown記号を除去してプレーンテキストに
 function stripMarkdown(text: string): string {
   return text
@@ -36,7 +48,7 @@ export function NoteGrid({ notes }: { notes: Note[] }) {
 
 function NoteCard({ note, onClick }: { note: Note; onClick: () => void }) {
   const hasImages = note.images && note.images.length > 0;
-  const thumbnailUrl = hasImages ? `/api/images/${note.images[0]}` : null;
+  const thumbnailUrl = hasImages ? `/api/files/${note.images[0]}` : null;
   const excerpt = stripMarkdown(note.content || '').slice(0, 100);
 
   return (
@@ -66,7 +78,7 @@ function NoteCard({ note, onClick }: { note: Note; onClick: () => void }) {
           {excerpt || 'メモがありません'}
         </p>
         <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-          <span>{note.updatedAt.toLocaleDateString('ja-JP')}</span>
+          <span>{formatDate(note.updatedAt)}</span>
           {note.tags && note.tags.length > 0 && (
             <span className="truncate ml-2">#{note.tags.join(' #')}</span>
           )}

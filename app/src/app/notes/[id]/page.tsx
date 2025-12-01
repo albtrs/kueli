@@ -7,12 +7,14 @@ import dynamic from 'next/dynamic';
 import { getNote, saveNote as saveNoteAction, deleteNote } from '@/actions/note';
 import { Note } from '@/lib/types';
 import { extractTags } from '@/lib/utils';
+import { createTableTemplate, convertTsvToMd, formatMarkdownTable, findTableRange } from '@/lib/table-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Loader2, Check, Upload } from 'lucide-react';
+import { ArrowLeft, Loader2, Check, Upload, Table, Wand2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 
 // CodeMirrorは動的インポート（SSR無効化）
 const CodeMirror = dynamic(
@@ -42,8 +44,12 @@ export default function EditorPage() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [extensions, setExtensions] = useState<any[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [defaultTab, setDefaultTab] = useState<'write' | 'preview'>('write');
+  const [editorReady, setEditorReady] = useState(false);
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const editorRef = useRef<ReactCodeMirrorRef>(null);
 
   // Markdownエクステンションを読み込み
   useEffect(() => {
@@ -80,6 +86,8 @@ export default function EditorPage() {
           setNote(record);
           setTitle(record.title);
           setContent(record.content || '');
+          // コンテンツがある場合はプレビュー、ない場合は編集をデフォルトに
+          setDefaultTab(record.content ? 'preview' : 'write');
         }
       } catch (err) {
         if (isMounted) {
@@ -152,8 +160,8 @@ export default function EditorPage() {
   };
 
   // ファイルアップロード
-  const uploadFile = async (file: File): Promise<string | null> => {
-    if (!note) return null;
+  const uploadFile = async (file: File): Promise<{ url: string | null; error?: string }> => {
+    if (!note) return { url: null, error: 'ノートが見つかりません' };
 
     try {
       const formData = new FormData();
@@ -165,7 +173,11 @@ export default function EditorPage() {
       });
 
       if (!response.ok) {
-        throw new Error('Upload failed');
+        const errorData = await response.json();
+        return { 
+          url: null, 
+          error: errorData.error || 'アップロードに失敗しました' 
+        };
       }
 
       const data = await response.json();
@@ -178,10 +190,13 @@ export default function EditorPage() {
       });
       setNote(updated);
 
-      return data.url;
+      return { url: data.url };
     } catch (err) {
       console.error('Failed to upload file:', err);
-      return null;
+      return { 
+        url: null, 
+        error: err instanceof Error ? err.message : 'アップロードに失敗しました' 
+      };
     }
   };
 
@@ -202,19 +217,39 @@ export default function EditorPage() {
 
     const files = Array.from(e.dataTransfer.files);
     
-    for (const file of files) {
-      const url = await uploadFile(file);
-      if (url) {
-        // 画像かどうかで挿入形式を変える
-        const isImage = file.type.startsWith('image/');
-        const insertText = isImage
-          ? `![${file.name}](${url})\n`
-          : `[${file.name}](${url})\n`;
-        
+    try {
+      setIsUploading(true);
+      
+      // 全ファイルのアップロードを待つ
+      const uploadPromises = files.map(file => uploadFile(file));
+      const results = await Promise.all(uploadPromises);
+      
+      // エラーメッセージを収集
+      const errors: string[] = [];
+      let insertText = '';
+      
+      files.forEach((file, index) => {
+        const result = results[index];
+        if (result.url) {
+          insertText += `![${file.name}](${result.url})\n`;
+        } else if (result.error) {
+          errors.push(`${file.name}: ${result.error}`);
+        }
+      });
+      
+      // エラーがあれば表示
+      if (errors.length > 0) {
+        alert('以下のファイルのアップロードに失敗しました:\n\n' + errors.join('\n'));
+      }
+      
+      // 成功したファイルのMarkdownを挿入
+      if (insertText) {
         const newContent = content + insertText;
         setContent(newContent);
         handleContentChange(newContent);
       }
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -235,26 +270,151 @@ export default function EditorPage() {
     await performSave(title, content);
   };
 
-  // カスタムMarkdownレンダラー（認証付きAPI経由）
-  const markdownComponents: any = {
-    img: ({ src, alt, ...props }: any) => {
-      if (!src || typeof src !== 'string') return null;
-      
-      // /uploads/* を /api/images/* に変換
-      const imageSrc = src.startsWith('/uploads/')
-        ? src.replace('/uploads/', '/api/images/')
-        : src;
-      
+  // テーブル機能
+  const handleInsertTable = () => {
+    const tableMd = createTableTemplate(3, 3);
+    const view = editorRef.current?.view;
+    if (view) {
+      const range = view.state.selection.main;
+      view.dispatch({
+        changes: { from: range.from, to: range.to, insert: '\n' + tableMd + '\n' }
+      });
+      view.focus();
+    }
+  };
+
+  const handleFormatTable = () => {
+    const view = editorRef.current?.view;
+    if (!view) return;
+
+    const range = view.state.selection.main;
+    
+    // 選択範囲がある場合はそれを整形
+    if (range.from !== range.to) {
+      const selectedText = view.state.sliceDoc(range.from, range.to);
+      if (selectedText.includes('|')) {
+        const formatted = formatMarkdownTable(selectedText);
+        view.dispatch({
+          changes: { from: range.from, to: range.to, insert: formatted }
+        });
+      }
+    } else {
+      // カーソル位置のテーブルを自動検出して整形
+      const tableRange = findTableRange(content, range.from);
+      if (tableRange) {
+        const formatted = formatMarkdownTable(tableRange.text);
+        view.dispatch({
+          changes: { from: tableRange.from, to: tableRange.to, insert: formatted }
+        });
+      }
+    }
+    view.focus();
+  };
+
+  const handlePaste = useCallback((event: ClipboardEvent) => {
+    const text = event.clipboardData?.getData('text/plain');
+    if (!text) return;
+
+    const table = convertTsvToMd(text);
+    if (table) {
+      event.preventDefault();
+      const view = editorRef.current?.view;
+      if (view) {
+        const range = view.state.selection.main;
+        view.dispatch({
+          changes: { from: range.from, to: range.to, insert: table }
+        });
+      }
+    }
+  }, []);
+
+  // ペーストイベントリスナーの登録
+  useEffect(() => {
+    if (!editorReady) return;
+    
+    const view = editorRef.current?.view;
+    if (!view) return;
+
+    const dom = view.dom;
+    dom.addEventListener('paste', handlePaste);
+
+    return () => {
+      dom.removeEventListener('paste', handlePaste);
+    };
+  }, [handlePaste, editorReady]);
+
+  // メディアレンダラー（拡張子で自動判別）
+  const MediaRenderer = ({ src, alt }: { src?: string; alt?: string }) => {
+    if (!src || typeof src !== 'string') return null;
+
+    // /api/files/ がない場合は補完
+    const fullSrc = src.startsWith('/api/files/') || src.startsWith('http') 
+      ? src 
+      : `/api/files/${src}`;
+
+    const ext = src.split('.').pop()?.toLowerCase();
+    const filename = alt || src.split('/').pop() || 'file';
+
+    // 動画
+    if (['mp4', 'webm', 'mov', 'avi'].includes(ext || '')) {
       return (
-        <img
-          {...props}
-          src={imageSrc}
-          alt={alt || ''}
-          className="max-w-full h-auto rounded-lg my-2"
-          loading="lazy"
-        />
+        <video 
+          controls 
+          className="w-full max-h-[500px] rounded-lg my-4 bg-black" 
+          preload="metadata"
+        >
+          <source src={fullSrc} />
+          動画を再生できません。
+        </video>
       );
-    },
+    }
+
+    // 音声
+    if (['mp3', 'wav', 'm4a', 'ogg'].includes(ext || '')) {
+      return (
+        <>
+          <audio controls className="w-full my-2">
+            <source src={fullSrc} />
+            音声を再生できません。
+          </audio>
+          <span className="text-sm text-muted-foreground block mt-1">{filename}</span>
+        </>
+      );
+    }
+
+    // その他のファイル（PDF、Office、Zipなど）
+    if (['pdf', 'docx', 'xlsx', 'pptx', 'zip', 'txt', 'md', 'csv'].includes(ext || '')) {
+      return (
+        <span className="inline-block my-2">
+          <a
+            href={fullSrc}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-3 bg-muted rounded-lg hover:bg-muted/80 transition-colors"
+          >
+            <span className="text-xl">📎</span>
+            <span className="font-medium">{filename}</span>
+          </a>
+        </span>
+      );
+    }
+
+    // 画像（デフォルト）
+    return (
+      <img
+        src={fullSrc}
+        alt={alt || ''}
+        className="max-w-full h-auto rounded-lg my-2"
+        loading="lazy"
+      />
+    );
+  };
+
+  // カスタムMarkdownレンダラー
+  const markdownComponents: any = {
+    img: ({ node, ...props }: any) => (
+      <MediaRenderer src={props.src} alt={props.alt} />
+    ),
   };
 
   if (isLoading) {
@@ -301,7 +461,7 @@ export default function EditorPage() {
 
         {/* Editor */}
         <main className="flex-1 container mx-auto p-4">
-        <Tabs defaultValue="write" className="h-full">
+        <Tabs defaultValue={defaultTab} key={defaultTab} className="h-full">
           <div className="flex items-center justify-between mb-4">
             <TabsList>
               <TabsTrigger value="write">編集</TabsTrigger>
@@ -318,8 +478,33 @@ export default function EditorPage() {
           />
 
           <TabsContent value="write" className="h-[calc(100vh-180px)]">
+            {/* ツールバー */}
+            <div className="flex items-center gap-2 p-2 mb-2 bg-muted/50 rounded-md border">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleInsertTable}
+                title="3×3のテーブルを挿入"
+              >
+                <Table className="w-4 h-4 mr-2" />
+                テーブル挿入
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleFormatTable}
+                title="選択範囲またはカーソル位置のテーブルを整形"
+              >
+                <Wand2 className="w-4 h-4 mr-2" />
+                テーブル整形
+              </Button>
+              <div className="ml-auto text-xs text-muted-foreground">
+                Excel/スプレッドシートからコピペでテーブル作成可能
+              </div>
+            </div>
+
             <div
-              className={`h-full rounded-lg border ${
+              className={`h-[calc(100%-60px)] rounded-lg border ${
                 isDragOver ? 'border-primary border-2 bg-primary/5' : 'border-input'
               }`}
               onDragOver={handleDragOver}
@@ -334,11 +519,21 @@ export default function EditorPage() {
                   </div>
                 </div>
               )}
+              {isUploading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 rounded-lg">
+                  <div className="flex flex-col items-center gap-2 text-primary">
+                    <Loader2 className="h-8 w-8 animate-spin" />
+                    <span>アップロード中...</span>
+                  </div>
+                </div>
+              )}
               <CodeMirror
+                ref={editorRef}
                 value={content}
                 height="100%"
                 extensions={extensions}
                 onChange={handleContentChange}
+                onCreateEditor={() => setEditorReady(true)}
                 placeholder="Markdownで入力..."
                 className="h-full [&_.cm-editor]:h-full [&_.cm-scroller]:h-full"
                 basicSetup={{
@@ -356,6 +551,7 @@ export default function EditorPage() {
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={markdownComponents}
+                  unwrapDisallowed={true}
                 >
                   {content}
                 </ReactMarkdown>

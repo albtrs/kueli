@@ -14,7 +14,7 @@ const nextConfig: NextConfig = {
   
   // Image最適化の設定
   images: {
-    // /api/images/* は内部APIなので最適化を無効化
+    // /api/files/* は認証付きAPIなので最適化を無効化
     unoptimized: true,
   },
 };

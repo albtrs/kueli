@@ -6,7 +6,7 @@ import { UnauthorizedError, ValidationError, NotFoundError, handleError } from '
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { filename: string } }
+  { params }: { params: Promise<{ filename: string }> }
 ) {
   try {
     // 認証チェック
@@ -15,7 +15,7 @@ export async function GET(
       throw new UnauthorizedError();
     }
 
-    const { filename } = params;
+    const { filename } = await params;
     
     // パストラバーサル対策
     if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
@@ -32,12 +32,28 @@ export async function GET(
     // MIMEタイプを判定
     const ext = filename.split('.').pop()?.toLowerCase();
     const mimeTypes: Record<string, string> = {
+      // 画像
       jpg: 'image/jpeg',
       jpeg: 'image/jpeg',
       png: 'image/png',
       gif: 'image/gif',
       webp: 'image/webp',
       svg: 'image/svg+xml',
+      // 文書
+      pdf: 'application/pdf',
+      txt: 'text/plain',
+      md: 'text/markdown',
+      csv: 'text/csv',
+      // Office
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      // アーカイブ
+      zip: 'application/zip',
+      // 動画
+      mp4: 'video/mp4',
+      // 音声
+      mp3: 'audio/mpeg',
     };
     const mimeType = mimeTypes[ext || ''] || 'application/octet-stream';
 

@@ -11,7 +11,7 @@ services:
       - ./data/uploads:/app/public/uploads
       - ./data/prisma:/app/prisma/db
     environment:
+      - TZ=Asia/Tokyo
       - WATCHPACK_POLLING=true
       - NODE_ENV=development
-      - DATABASE_URL=file:/app/prisma/db/dev.db
     restart: unless-stopped

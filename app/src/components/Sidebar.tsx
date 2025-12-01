@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import { getNotes, saveNote } from '@/actions/note';
 import { Note } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { FileText, Pin, Plus, Tag } from 'lucide-react';
+import { FileText, Pin, Plus, Tag, Paperclip } from 'lucide-react';
 
 interface TagViewRecord {
   id: string;
@@ -153,6 +153,17 @@ export function Sidebar() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* 添付ファイル管理リンク */}
+      <div className="p-4 border-t">
+        <div
+          className="flex items-center gap-2 py-2 px-2 hover:bg-muted rounded-md cursor-pointer text-muted-foreground hover:text-foreground"
+          onClick={() => router.push('/attachments')}
+        >
+          <Paperclip className="h-4 w-4" />
+          <span className="text-sm">添付ファイル管理</span>
+        </div>
       </div>
     </aside>
   );
