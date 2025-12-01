@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { auth } from '@/lib/auth';
-import { getNotes } from '@/actions/note';
+import { getNotes } from '@/lib/queries';
 import { Sidebar } from '@/components/Sidebar';
 import { DashboardHeader } from '@/components/DashboardHeader';
 import { NoteGrid } from '@/components/NoteGrid';

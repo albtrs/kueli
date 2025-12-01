@@ -20,7 +20,11 @@ function parseNote(dbNote: any): Note {
   }
 }
 
-export async function getNotes(): Promise<Note[]> {
+/**
+ * 全ノート取得（Client Component 用 Server Action）
+ * Server Components は lib/queries.ts の getNotes を使用すること（cache適用）
+ */
+export async function fetchNotes(): Promise<Note[]> {
   try {
     const session = await auth()
     if (!session?.user) {
@@ -33,12 +37,16 @@ export async function getNotes(): Promise<Note[]> {
 
     return notes.map(parseNote)
   } catch (error) {
-    console.error('getNotes error:', handleServerActionError(error))
+    console.error('fetchNotes error:', handleServerActionError(error))
     throw error
   }
 }
 
-export async function getNote(id: string): Promise<Note | null> {
+/**
+ * 個別ノート取得（Client Component 用 Server Action）
+ * Server Components は lib/queries.ts の getNote を使用すること（cache適用）
+ */
+export async function fetchNote(id: string): Promise<Note | null> {
   try {
     const session = await auth()
     if (!session?.user) {
@@ -52,7 +60,7 @@ export async function getNote(id: string): Promise<Note | null> {
     if (!note) return null
     return parseNote(note)
   } catch (error) {
-    console.error('getNote error:', handleServerActionError(error))
+    console.error('fetchNote error:', handleServerActionError(error))
     throw error
   }
 }

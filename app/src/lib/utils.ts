@@ -6,6 +6,44 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * 日付をJSTでフォーマット（yyyy/M/d形式）
+ * SSR/CSRの不一致を防ぐためUTCベースで計算
+ */
+export function formatDateJST(date: Date | string): string {
+  const d = new Date(date);
+  // JSTはUTC+9なので、9時間足した値で計算
+  const jstDate = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  return `${jstDate.getUTCFullYear()}/${jstDate.getUTCMonth() + 1}/${jstDate.getUTCDate()}`;
+}
+
+/**
+ * 日付をJSTで詳細フォーマット（yyyy/M/d HH:mm形式）
+ */
+export function formatDateTimeJST(date: Date | string): string {
+  const d = new Date(date);
+  const jstDate = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  const hours = String(jstDate.getUTCHours()).padStart(2, '0');
+  const minutes = String(jstDate.getUTCMinutes()).padStart(2, '0');
+  return `${jstDate.getUTCFullYear()}/${jstDate.getUTCMonth() + 1}/${jstDate.getUTCDate()} ${hours}:${minutes}`;
+}
+
+/**
+ * Markdown記号を除去してプレーンテキストに
+ */
+export function stripMarkdown(text: string): string {
+  return text
+    .replace(/#{1,6}\s/g, '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/`(.+?)`/g, '$1')
+    .replace(/!\[.*?\]\(.*?\)/g, '')
+    .replace(/\[(.+?)\]\(.*?\)/g, '$1')
+    .replace(/>\s/g, '')
+    .replace(/[-*+]\s/g, '')
+    .trim();
+}
+
+/**
  * Markdown本文から #tag 形式のタグを抽出
  * @param content - Markdown本文
  * @returns タグの配列（重複なし）

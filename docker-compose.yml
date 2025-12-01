@@ -10,8 +10,13 @@ services:
       - ./app:/app
       - ./data/uploads:/app/public/uploads
       - ./data/prisma:/app/prisma/db
+      - /app/node_modules
+      - /app/.next
     environment:
       - TZ=Asia/Tokyo
       - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
       - NODE_ENV=development
+    tty: true
+    stdin_open: true
     restart: unless-stopped

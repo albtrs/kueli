@@ -4,18 +4,17 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import dynamic from 'next/dynamic';
-import { getNote, getNotes, saveNote as saveNoteAction, deleteNote } from '@/actions/note';
+import { fetchNote, fetchNotes } from '@/actions/note';
+import { saveNote as saveNoteAction, deleteNote } from '@/actions/note';
 import { Note } from '@/lib/types';
 import { extractTags } from '@/lib/utils';
 import { createTableTemplate, convertTsvToMd, formatMarkdownTable, findTableRange } from '@/lib/table-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LinkPreview } from '@/components/LinkPreview';
-import { ArrowLeft, Loader2, Check, Upload, Table, Wand2 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkWikiLink from 'remark-wiki-link';
+import { EditorToolbar } from '@/components/EditorToolbar';
+import { MarkdownPreview } from '@/components/MarkdownPreview';
+import { ArrowLeft, Loader2, Check, Upload } from 'lucide-react';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 
 // CodeMirrorは動的インポート（SSR無効化）
@@ -144,12 +143,12 @@ export default function EditorPage() {
 
     let isMounted = true;
 
-    const fetchNote = async () => {
+    const fetchNoteData = async () => {
       try {
         // 現在のノートと全ノート（Wikiリンク用）を並列で取得
         const [record, notes] = await Promise.all([
-          getNote(noteId),
-          getNotes()
+          fetchNote(noteId),
+          fetchNotes()
         ]);
         
         if (!record) {
@@ -179,7 +178,7 @@ export default function EditorPage() {
       }
     };
 
-    fetchNote();
+    fetchNoteData();
 
     return () => {
       isMounted = false;
@@ -421,127 +420,6 @@ export default function EditorPage() {
     };
   }, [handlePaste, editorReady]);
 
-  // メディアレンダラー（拡張子で自動判別）
-  const MediaRenderer = ({ src, alt }: { src?: string; alt?: string }) => {
-    if (!src || typeof src !== 'string') return null;
-
-    // /api/files/ がない場合は補完
-    const fullSrc = src.startsWith('/api/files/') || src.startsWith('http') 
-      ? src 
-      : `/api/files/${src}`;
-
-    const ext = src.split('.').pop()?.toLowerCase();
-    const filename = alt || src.split('/').pop() || 'file';
-
-    // 動画
-    if (['mp4', 'webm', 'mov', 'avi'].includes(ext || '')) {
-      return (
-        <video 
-          controls 
-          className="w-full max-h-[500px] rounded-lg my-4 bg-black" 
-          preload="metadata"
-        >
-          <source src={fullSrc} />
-          動画を再生できません。
-        </video>
-      );
-    }
-
-    // 音声
-    if (['mp3', 'wav', 'm4a', 'ogg'].includes(ext || '')) {
-      return (
-        <>
-          <audio controls className="w-full my-2">
-            <source src={fullSrc} />
-            音声を再生できません。
-          </audio>
-          <span className="text-sm text-muted-foreground block mt-1">{filename}</span>
-        </>
-      );
-    }
-
-    // その他のファイル（PDF、Office、Zipなど）
-    if (['pdf', 'docx', 'xlsx', 'pptx', 'zip', 'txt', 'md', 'csv'].includes(ext || '')) {
-      return (
-        <span className="inline-block my-2">
-          <a
-            href={fullSrc}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-3 bg-muted rounded-lg hover:bg-muted/80 transition-colors"
-          >
-            <span className="text-xl">📎</span>
-            <span className="font-medium">{filename}</span>
-          </a>
-        </span>
-      );
-    }
-
-    // 画像（デフォルト）
-    return (
-      <img
-        src={fullSrc}
-        alt={alt || ''}
-        className="max-w-full h-auto rounded-lg my-2"
-        loading="lazy"
-      />
-    );
-  };
-
-  // カスタムMarkdownレンダラー
-  const markdownComponents: any = {
-    img: ({ node, ...props }: any) => (
-      <MediaRenderer src={props.src} alt={props.alt} />
-    ),
-    a: ({ node, href, children, className, ...props }: any) => {
-      // Wikiリンクの場合（remark-wiki-linkが付与するクラス）
-      const isWikiLink = className?.includes('internal');
-      const isNewWikiLink = className?.includes('new');
-      
-      if (isWikiLink) {
-        return (
-          <a
-            href={href}
-            className={isNewWikiLink ? 'wiki-link-new' : 'wiki-link'}
-            {...props}
-          >
-            {children}
-          </a>
-        );
-      }
-      
-      // 外部リンクの場合はプレビューを表示
-      const isExternal = href?.startsWith('http://') || href?.startsWith('https://');
-      
-      return (
-        <>
-          <a
-            href={href}
-            target={isExternal ? '_blank' : undefined}
-            rel={isExternal ? 'noopener noreferrer' : undefined}
-            {...props}
-          >
-            {children}
-          </a>
-          {isExternal && <LinkPreview href={href} />}
-        </>
-      );
-    },
-  };
-
-  // remarkWikiLink の設定
-  const wikiLinkOptions = useMemo(() => ({
-    permalinks: Object.keys(permalinks),
-    pageResolver: (name: string) => [name],
-    hrefTemplate: (permalink: string) => {
-      const id = permalinks[permalink];
-      return id ? `/notes/${id}` : `/notes/new?title=${encodeURIComponent(permalink)}`;
-    },
-    wikiLinkClassName: 'internal wiki-link',
-    newClassName: 'new',
-    aliasDivider: '|',
-  }), [permalinks]);
-
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -605,31 +483,10 @@ export default function EditorPage() {
 
           <TabsContent value="write" className="flex-1 min-h-0 flex flex-col">
             {/* ツールバー */}
-            <div className="flex flex-wrap items-center gap-1 md:gap-2 p-2 mb-2 bg-muted/30 rounded border text-xs md:text-sm">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleInsertTable}
-                title="3×3のテーブルを挿入"
-                className="h-7 px-2 md:h-8 md:px-3"
-              >
-                <Table className="w-4 h-4 md:mr-1" />
-                <span className="hidden md:inline">テーブル</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleFormatTable}
-                title="選択範囲またはカーソル位置のテーブルを整形"
-                className="h-7 px-2 md:h-8 md:px-3"
-              >
-                <Wand2 className="w-4 h-4 md:mr-1" />
-                <span className="hidden md:inline">整形</span>
-              </Button>
-              <div className="ml-auto text-xs text-muted-foreground hidden lg:block">
-                D&Dでファイル添付
-              </div>
-            </div>
+            <EditorToolbar 
+              onInsertTable={handleInsertTable}
+              onFormatTable={handleFormatTable}
+            />
 
             <div
               className={`relative flex-1 min-h-0 rounded-sm border transition-colors overflow-hidden ${
@@ -675,17 +532,7 @@ export default function EditorPage() {
 
           <TabsContent value="preview" className="flex-1 min-h-0 overflow-auto">
             <div className="prose prose-base dark:prose-invert max-w-none rounded border border-input p-4" style={{ fontFamily: 'var(--font-noto-sans-jp), sans-serif' }}>
-              {content ? (
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm, [remarkWikiLink, wikiLinkOptions]]}
-                  components={markdownComponents}
-                  unwrapDisallowed={true}
-                >
-                  {content}
-                </ReactMarkdown>
-              ) : (
-                <p className="text-muted-foreground">プレビューする内容がありません</p>
-              )}
+              <MarkdownPreview content={content} permalinks={permalinks} />
             </div>
           </TabsContent>
         </Tabs>

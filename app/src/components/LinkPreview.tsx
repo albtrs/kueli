@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Tweet } from 'react-tweet';
 import { ExternalLink, Loader2 } from 'lucide-react';
+import { extractYouTubeVideoId, extractTweetId } from '@/lib/media-utils';
 
 interface OGPData {
   title?: string;
@@ -14,27 +15,6 @@ interface OGPData {
 
 interface LinkPreviewProps {
   href: string;
-}
-
-// YouTubeのURLからビデオIDを抽出
-function extractYouTubeVideoId(url: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
-    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
-  ];
-  
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) return match[1];
-  }
-  return null;
-}
-
-// X (Twitter) のURLからツイートIDを抽出
-function extractTweetId(url: string): string | null {
-  const pattern = /(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/;
-  const match = url.match(pattern);
-  return match ? match[1] : null;
 }
 
 // YouTubeプレビュー

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { getNotes } from '@/actions/note';
+import { fetchNotes } from '@/actions/note';
 import { Note } from '@/lib/types';
 import { FileText, Pin, Tag, Paperclip, Menu, X } from 'lucide-react';
 
@@ -33,7 +33,7 @@ export function Sidebar() {
     try {
       // 全ノートからタグをリアルタイム集計
       try {
-        const allNotes = await getNotes();
+        const allNotes = await fetchNotes();
         
         const tagCounts = new Map<string, number>();
         allNotes.forEach(note => {

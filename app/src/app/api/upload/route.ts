@@ -4,34 +4,13 @@ import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
 import { UnauthorizedError, ValidationError, handleError } from '@/lib/errors';
-
-// 許可するファイルタイプ
-const ALLOWED_FILE_TYPES = {
-  // 画像
-  'image/jpeg': ['.jpg', '.jpeg'],
-  'image/png': ['.png'],
-  'image/gif': ['.gif'],
-  'image/webp': ['.webp'],
-  // 文書
-  'application/pdf': ['.pdf'],
-  'text/plain': ['.txt'],
-  'text/markdown': ['.md'],
-  'text/csv': ['.csv'],
-  // Office
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
-  // アーカイブ
-  'application/zip': ['.zip'],
-  'application/x-zip-compressed': ['.zip'],
-  // 動画
-  'video/mp4': ['.mp4'],
-  // 音声
-  'audio/mpeg': ['.mp3'],
-  'audio/mp3': ['.mp3'],
-};
-
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+import { 
+  ALLOWED_FILE_TYPES, 
+  getAllowedExtensions, 
+  isValidMimeAndExtension,
+  getFileCategoryFromMime,
+  MAX_FILE_SIZE 
+} from '@/lib/file-utils';
 
 export async function POST(req: NextRequest) {
   try {
@@ -51,7 +30,7 @@ export async function POST(req: NextRequest) {
     const ext = `.${file.name.split('.').pop()?.toLowerCase()}`;
     
     // ファイルタイプのバリデーション
-    const allowedExtensions = Object.values(ALLOWED_FILE_TYPES).flat();
+    const allowedExtensions = getAllowedExtensions();
     if (!allowedExtensions.includes(ext)) {
       throw new ValidationError(
         `File type not allowed. Allowed types: ${allowedExtensions.join(', ')}`
@@ -59,11 +38,7 @@ export async function POST(req: NextRequest) {
     }
 
     // MIMEタイプも確認（より厳密なチェック）
-    const isValidMimeType = Object.entries(ALLOWED_FILE_TYPES).some(
-      ([mimeType, exts]) => file.type === mimeType && exts.includes(ext)
-    );
-    
-    if (!isValidMimeType) {
+    if (!isValidMimeAndExtension(file.type, ext)) {
       throw new ValidationError('File MIME type does not match extension');
     }
 
@@ -87,11 +62,8 @@ export async function POST(req: NextRequest) {
     const filePath = join(uploadsDir, filename);
     await writeFile(filePath, buffer);
     
-    // ファイルタイプを判定
-    const fileCategory = file.type.startsWith('image/') ? 'image'
-      : file.type.startsWith('video/') ? 'video'
-      : file.type.startsWith('audio/') ? 'audio'
-      : 'file';
+    // ファイルカテゴリを判定
+    const fileCategory = getFileCategoryFromMime(file.type);
     
     return NextResponse.json({
       filename,
