@@ -123,6 +123,16 @@
     font-size: 16px;
     line-height: 1.6;
   }
+  /* リンク・ボタンのカーソルをポインターに統一 */
+  a,
+  button,
+  [role="button"],
+  [type="button"],
+  [type="submit"],
+  [type="reset"],
+  .cursor-pointer {
+    cursor: pointer;
+  }
 }
 
 /* CodeMirrorのフォーカス時のアウトラインを無効化 */

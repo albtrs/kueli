@@ -3,12 +3,18 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Note } from '@/lib/types';
-import { fetchNotesPage } from '@/actions/note';
+import { fetchNotesPage, togglePin, deleteNote } from '@/actions/note';
 import { formatDateJST, stripMarkdown } from '@/lib/utils';
 import { extractYouTubeThumbnail, extractTweetId, extractFirstExternalLink } from '@/lib/media-utils';
 import { extractFirstMedia } from '@/lib/file-utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Play, Link as LinkIcon, Loader2 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Play, Link as LinkIcon, Loader2, MoreVertical, Pin, Trash2 } from 'lucide-react';
 
 interface NoteGridProps {
   // 従来の静的表示用（ピン留めセクションなど）
@@ -19,6 +25,9 @@ interface NoteGridProps {
   initialHasMore?: boolean;
   tag?: string;
   search?: string;
+  // 親コンポーネントへのコールバック（ピン留めセクション連動用）
+  onNoteUpdate?: (note: Note) => void;
+  onNoteDelete?: (noteId: string) => void;
 }
 
 export function NoteGrid({ 
@@ -28,6 +37,8 @@ export function NoteGrid({
   initialHasMore = false,
   tag,
   search,
+  onNoteUpdate,
+  onNoteDelete,
 }: NoteGridProps) {
   const router = useRouter();
   
@@ -81,13 +92,32 @@ export function NoteGrid({
   }, [isInfiniteMode, hasMore, isLoading, loadMore]);
   
   // タグや検索が変わったらリセット（page.tsx 側で initialNotes が変わる）
+  // notes（静的モード）の変更も監視
   useEffect(() => {
-    if (initialNotes) {
+    if (notes) {
+      // 静的モード：notes が変わったら displayNotes を更新
+      setDisplayNotes(notes);
+    } else if (initialNotes) {
+      // 無限スクロールモード
       setDisplayNotes(initialNotes);
       setCursor(initialCursor || null);
       setHasMore(initialHasMore);
     }
-  }, [initialNotes, initialCursor, initialHasMore]);
+  }, [notes, initialNotes, initialCursor, initialHasMore]);
+
+  // ノートの更新（ピン留め切り替え時）
+  const handleNoteUpdate = useCallback((updatedNote: Note) => {
+    setDisplayNotes(prev => prev.map(n => n.id === updatedNote.id ? updatedNote : n));
+    // 親コンポーネントにも通知（ピン留めセクション連動）
+    onNoteUpdate?.(updatedNote);
+  }, [onNoteUpdate]);
+
+  // ノートの削除
+  const handleNoteDelete = useCallback((noteId: string) => {
+    setDisplayNotes(prev => prev.filter(n => n.id !== noteId));
+    // 親コンポーネントにも通知
+    onNoteDelete?.(noteId);
+  }, [onNoteDelete]);
 
   return (
     <>
@@ -97,6 +127,8 @@ export function NoteGrid({
             key={note.id}
             note={note}
             onClick={() => router.push(`/notes/${note.id}`)}
+            onUpdate={handleNoteUpdate}
+            onDelete={handleNoteDelete}
           />
         ))}
       </div>
@@ -118,7 +150,17 @@ export function NoteGrid({
   );
 }
 
-function NoteCard({ note, onClick }: { note: Note; onClick: () => void }) {
+function NoteCard({ 
+  note, 
+  onClick,
+  onUpdate,
+  onDelete,
+}: { 
+  note: Note; 
+  onClick: () => void;
+  onUpdate?: (note: Note) => void;
+  onDelete?: (noteId: string) => void;
+}) {
   const media = extractFirstMedia(note.content, note.images || []);
   const youtubeThumbnail = !media ? extractYouTubeThumbnail(note.content) : null;
   const tweetId = !media && !youtubeThumbnail ? extractTweetId(note.content) : null;
@@ -127,6 +169,7 @@ function NoteCard({ note, onClick }: { note: Note; onClick: () => void }) {
   const [ogpImage, setOgpImage] = useState<string | null>(null);
   const [tweetImage, setTweetImage] = useState<string | null>(null);
   const [ogpLoading, setOgpLoading] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   
   // OGP画像を取得
   useEffect(() => {
@@ -173,11 +216,72 @@ function NoteCard({ note, onClick }: { note: Note; onClick: () => void }) {
     }
   };
 
+  // ピン留め切り替え
+  const handleTogglePin = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const updated = await togglePin(note.id);
+      onUpdate?.(updated);
+    } catch (error) {
+      console.error('Failed to toggle pin:', error);
+    }
+  };
+
+  // 削除
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('このメモを削除しますか？')) return;
+    try {
+      await deleteNote(note.id);
+      onDelete?.(note.id);
+    } catch (error) {
+      console.error('Failed to delete note:', error);
+    }
+  };
+
   return (
     <Card
-      className="cursor-pointer transition-all hover:border-foreground/20 group overflow-hidden"
+      className="cursor-pointer transition-all hover:border-foreground/20 group overflow-hidden relative"
       onClick={onClick}
     >
+      {/* コンテキストメニュー */}
+      <div className="absolute top-1.5 right-1.5 z-10">
+        <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+          <DropdownMenuTrigger asChild>
+            <button
+              className={`p-1.5 rounded-md bg-background/80 backdrop-blur-sm border border-border/50 transition-opacity ${
+                isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreVertical className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuItem onClick={handleTogglePin}>
+              <Pin className={`h-4 w-4 mr-2 ${note.isPinned ? 'fill-current' : ''}`} />
+              {note.isPinned ? 'ピン解除' : 'ピン留め'}
+            </DropdownMenuItem>
+            <DropdownMenuItem 
+              onClick={handleDelete}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              削除
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* ピン留めインジケータ */}
+      {note.isPinned && (
+        <div className="absolute top-1.5 left-1.5 z-10">
+          <div className="p-1 rounded-md bg-primary text-primary-foreground">
+            <Pin className="h-3 w-3 fill-current" />
+          </div>
+        </div>
+      )}
+
       {/* 添付ファイル（画像/動画） */}
       {hasMedia && (
         <div className="relative aspect-video overflow-hidden bg-muted">
