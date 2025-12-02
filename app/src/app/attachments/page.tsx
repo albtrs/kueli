@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import { DashboardLayout } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, Trash2, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Loader2, Trash2, ExternalLink, AlertTriangle } from 'lucide-react';
 
 interface FileInfo {
   filename: string;
@@ -140,32 +141,34 @@ export default function AttachmentsPage() {
 
   if (status === 'loading' || isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
+      <DashboardLayout>
+        <div className="flex h-full items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-background">
-        <div className="max-w-6xl mx-auto flex h-12 items-center gap-2 px-4 md:px-6">
-          <Button variant="ghost" size="icon" onClick={() => router.push('/')} className="h-8 w-8">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <h1 className="text-sm font-medium md:text-base">添付ファイル</h1>
-          <div className="ml-auto flex items-center gap-2 md:gap-4">
-            <div className="hidden md:block text-xs text-muted-foreground">
-              {stats.total}件 | 使用中 {stats.used} | 
-              <span className={stats.unused > 0 ? 'text-amber-600 font-medium' : ''}>
-                {' '}未使用 {stats.unused}
-              </span>
+    <DashboardLayout>
+      <div className="px-4 py-6 md:px-6">
+        <div className="max-w-6xl mx-auto">
+          {/* ヘッダー */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-2xl font-bold">添付ファイル</h1>
+              <p className="text-muted-foreground mt-1 text-sm">
+                {stats.total}件 | 使用中 {stats.used} | 
+                <span className={stats.unused > 0 ? 'text-amber-600 font-medium' : ''}>
+                  {' '}未使用 {stats.unused}
+                </span>
+              </p>
             </div>
             {stats.unused > 0 && (
               <Button 
                 variant="destructive" 
                 size="sm"
-                className="h-8 text-xs text-white"
+                className="text-xs text-white"
                 onClick={deleteAllUnused}
                 disabled={isDeleting}
               >
@@ -173,147 +176,138 @@ export default function AttachmentsPage() {
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <>
-                    <Trash2 className="h-3.5 w-3.5 md:mr-1" />
-                    <span className="hidden md:inline">未使用を削除</span>
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                    <span className="hidden sm:inline">未使用を削除</span>
+                    <span className="sm:hidden">削除</span>
                   </>
                 )}
               </Button>
             )}
           </div>
-        </div>
-      </header>
 
-      <main className="max-w-6xl mx-auto p-4 md:p-6">
-        {error && (
-          <div className="mb-4 p-3 bg-destructive/10 text-destructive rounded text-sm">
-            {error}
-          </div>
-        )}
+          {error && (
+            <div className="mb-4 p-3 bg-destructive/10 text-destructive rounded text-sm">
+              {error}
+            </div>
+          )}
 
-        {/* モバイル用統計 */}
-        <div className="md:hidden mb-4 text-xs text-muted-foreground">
-          {stats.total}件 | 使用中 {stats.used} | 
-          <span className={stats.unused > 0 ? 'text-amber-600 font-medium' : ''}>
-            {' '}未使用 {stats.unused}
-          </span>
-        </div>
-
-        {files.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground text-sm">
-            添付ファイルはありません
-          </div>
-        ) : (
-          <>
-            {/* デスクトップ用テーブル */}
-            <div className="hidden md:block border rounded overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="text-left px-3 py-2 font-medium">ファイル名</th>
-                    <th className="text-left px-3 py-2 font-medium w-20">サイズ</th>
-                    <th className="text-left px-3 py-2 font-medium w-24">作成日</th>
-                    <th className="text-left px-3 py-2 font-medium w-20">状態</th>
-                    <th className="text-center px-3 py-2 font-medium w-16">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {files.map((file) => (
-                    <tr 
-                      key={file.filename}
-                      className={`border-t ${!file.isUsed ? 'bg-amber-50 dark:bg-amber-950/20' : ''}`}
-                    >
-                      <td className="px-3 py-2">
-                        <a
-                          href={`/api/files/${file.filename}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 hover:underline text-primary"
-                        >
-                          <span className="truncate max-w-xs">{file.filename}</span>
-                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                        </a>
-                      </td>
-                      <td className="px-3 py-2 text-muted-foreground text-xs">
-                        {formatFileSize(file.size)}
-                      </td>
-                      <td className="px-3 py-2 text-muted-foreground text-xs">
-                        {formatDate(file.createdAt)}
-                      </td>
-                      <td className="px-3 py-2">
-                        {file.isUsed ? (
-                          <span className="text-xs text-green-600 dark:text-green-400">使用中</span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-                            <AlertTriangle className="h-3 w-3" />
-                            未使用
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        {!file.isUsed && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => deleteFile(file.filename)}
-                            disabled={isDeleting}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </td>
+          {files.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground text-sm">
+              添付ファイルはありません
+            </div>
+          ) : (
+            <>
+              {/* デスクトップ用テーブル */}
+              <div className="hidden md:block border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium">ファイル名</th>
+                      <th className="text-left px-3 py-2 font-medium w-20">サイズ</th>
+                      <th className="text-left px-3 py-2 font-medium w-24">作成日</th>
+                      <th className="text-left px-3 py-2 font-medium w-20">状態</th>
+                      <th className="text-center px-3 py-2 font-medium w-16">操作</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* モバイル用リスト */}
-            <div className="md:hidden space-y-2">
-              {files.map((file) => (
-                <div 
-                  key={file.filename}
-                  className={`border rounded p-3 ${!file.isUsed ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800' : ''}`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <a
-                      href={`/api/files/${file.filename}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-primary hover:underline truncate flex-1"
-                    >
-                      {file.filename}
-                    </a>
-                    {!file.isUsed && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10 flex-shrink-0"
-                        onClick={() => deleteFile(file.filename)}
-                        disabled={isDeleting}
+                  </thead>
+                  <tbody>
+                    {files.map((file) => (
+                      <tr 
+                        key={file.filename}
+                        className={`border-t ${!file.isUsed ? 'bg-amber-50 dark:bg-amber-950/20' : ''}`}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
+                        <td className="px-3 py-2">
+                          <a
+                            href={`/api/files/${file.filename}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 hover:underline text-primary"
+                          >
+                            <span className="truncate max-w-xs">{file.filename}</span>
+                            <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                          </a>
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground text-xs">
+                          {formatFileSize(file.size)}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground text-xs">
+                          {formatDate(file.createdAt)}
+                        </td>
+                        <td className="px-3 py-2">
+                          {file.isUsed ? (
+                            <span className="text-xs text-green-600 dark:text-green-400">使用中</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                              <AlertTriangle className="h-3 w-3" />
+                              未使用
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {!file.isUsed && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => deleteFile(file.filename)}
+                              disabled={isDeleting}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* モバイル用リスト */}
+              <div className="md:hidden space-y-2">
+                {files.map((file) => (
+                  <div 
+                    key={file.filename}
+                    className={`border rounded-lg p-3 ${!file.isUsed ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800' : ''}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <a
+                        href={`/api/files/${file.filename}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-primary hover:underline truncate flex-1"
+                      >
+                        {file.filename}
+                      </a>
+                      {!file.isUsed && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10 flex-shrink-0"
+                          onClick={() => deleteFile(file.filename)}
+                          disabled={isDeleting}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+                      <span>{formatFileSize(file.size)}</span>
+                      <span>{formatDate(file.createdAt)}</span>
+                      {file.isUsed ? (
+                        <span className="text-green-600 dark:text-green-400">使用中</span>
+                      ) : (
+                        <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          未使用
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
-                    <span>{formatFileSize(file.size)}</span>
-                    <span>{formatDate(file.createdAt)}</span>
-                    {file.isUsed ? (
-                      <span className="text-green-600 dark:text-green-400">使用中</span>
-                    ) : (
-                      <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                        <AlertTriangle className="h-3 w-3" />
-                        未使用
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </main>
-    </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </DashboardLayout>
   );
 }

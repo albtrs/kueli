@@ -20,13 +20,17 @@ const customHighlightTheme = EditorView.baseTheme({
     fontSize: "0.9em",
     border: "1px solid rgba(59, 130, 246, 0.3)",
   },
-  // ★ [[WikiLink]] のデザイン
+  // ★ [[WikiLink]] のデザイン（青色に統一、通常カーソル）
   ".cm-wikilink": {
-    color: "#9333ea", // 紫色
-    fontWeight: "bold",
-    borderBottom: "1px solid #9333ea", // アンダーライン
-    cursor: "pointer",
-  }
+    color: "#2563eb", // 青色（リンクと統一）
+    textDecoration: "underline",
+    cursor: "text", // エディタなので通常カーソル
+  },
+  // ★ 通常リンク (http://, https://) のデザイン
+  ".cm-link": {
+    color: "#2563eb",
+    textDecoration: "underline",
+  },
 });
 
 // タグのマッチャー
@@ -39,6 +43,12 @@ const hashtagMatcher = new MatchDecorator({
 const wikiLinkMatcher = new MatchDecorator({
   regexp: /\[\[[^\]]+\]\]/g,
   decoration: () => Decoration.mark({ class: "cm-wikilink" }),
+});
+
+// 通常リンク(http/https)のマッチャー - Markdown記法の外にある裸のURLのみ
+const urlMatcher = new MatchDecorator({
+  regexp: /(?<!\]\()https?:\/\/[^\s<>"'\)\]]+/g,
+  decoration: () => Decoration.mark({ class: "cm-link" }),
 });
 
 // プラグイン化
@@ -68,9 +78,23 @@ export const wikiLinkPlugin = ViewPlugin.fromClass(
   { decorations: (v) => v.decorations }
 );
 
+export const urlPlugin = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+    constructor(view: EditorView) {
+      this.decorations = urlMatcher.createDeco(view);
+    }
+    update(update: ViewUpdate) {
+      this.decorations = urlMatcher.updateDeco(update, this.decorations);
+    }
+  },
+  { decorations: (v) => v.decorations }
+);
+
 // まとめてエクスポート
 export const customHighlighters = [
   customHighlightTheme,
   hashtagPlugin,
-  wikiLinkPlugin
+  wikiLinkPlugin,
+  urlPlugin,
 ];

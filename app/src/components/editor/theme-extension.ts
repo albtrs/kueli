@@ -42,11 +42,9 @@ const markdownStyles = EditorView.theme({
   
   ".cm-content": { padding: "12px 16px" },
   
-  // アクティブ行
+  // アクティブ行（背景色のみ）
   ".cm-activeLine": {
     backgroundColor: "rgba(59, 130, 246, 0.05)",
-    borderLeft: "2px solid #3b82f6",
-    marginLeft: "-2px",
   },
 
   // 見出しサイズ調整 (そのまま維持)

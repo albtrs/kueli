@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
-import { LogOut, Paperclip, X, Archive, Home } from 'lucide-react';
+import { LogOut, Paperclip, X, Archive, Home, Settings } from 'lucide-react';
 
 interface LeftDrawerProps {
   isOpen: boolean;
@@ -72,6 +72,13 @@ export function LeftDrawer({ isOpen, onClose }: LeftDrawerProps) {
             >
               <Paperclip className="h-5 w-5 text-muted-foreground" />
               <span>添付ファイル</span>
+            </button>
+            <button
+              onClick={() => handleNavigate('/settings')}
+              className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-muted transition-colors text-left"
+            >
+              <Settings className="h-5 w-5 text-muted-foreground" />
+              <span>設定</span>
             </button>
           </nav>
 

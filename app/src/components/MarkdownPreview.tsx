@@ -12,6 +12,41 @@ interface MarkdownPreviewProps {
   permalinks: Record<string, string>;
 }
 
+// #タグをリンク+ハイライトに変換する関数
+function processHashtags(children: React.ReactNode): React.ReactNode {
+  if (typeof children === 'string') {
+    const parts = children.split(/(#[\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+)/g);
+    if (parts.length === 1) return children;
+    
+    return parts.map((part, index) => {
+      if (part.match(/^#[\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+$/)) {
+        const tag = part.slice(1); // # を除去
+        return (
+          <a
+            key={index}
+            href={`/?tag=${encodeURIComponent(tag)}`}
+            className="inline-block bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded text-sm font-medium hover:bg-blue-200 dark:hover:bg-blue-800/50 transition-colors"
+          >
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
+  }
+  
+  if (Array.isArray(children)) {
+    return children.map((child, index) => {
+      if (typeof child === 'string') {
+        return <span key={index}>{processHashtags(child)}</span>;
+      }
+      return child;
+    });
+  }
+  
+  return children;
+}
+
 /**
  * Markdownプレビューコンポーネント
  * Tailwind CSSでミニマルなスタイルを適用
@@ -45,7 +80,7 @@ export function MarkdownPreview({ content, permalinks }: MarkdownPreviewProps) {
 
     // --- 本文 ---
     p: ({ children }: any) => (
-      <p className="leading-7 mb-3">{children}</p>
+      <p className="leading-7 mb-3">{processHashtags(children)}</p>
     ),
 
     // --- リスト ---

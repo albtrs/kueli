@@ -154,17 +154,29 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
   // Markdownエクステンションを読み込み
   useEffect(() => {
     const loadExtensions = async () => {
-      const { EditorView } = await import('@codemirror/view');
+      const { EditorView, keymap } = await import('@codemirror/view');
+      const { moveLineUp, moveLineDown } = await import('@codemirror/commands');
       const markdownExt = await getMarkdownExtension();
       const wikiLinkExt = await getWikiLinkCompletion(noteTitles);
       const richTheme = await getRichMarkdownTheme();
       const customExt = await getCustomHighlighters();
+      
+      // 行移動のキーバインド
+      const lineMovementKeymap = keymap.of([
+        { key: "Ctrl-ArrowUp", run: moveLineUp, preventDefault: true },
+        { key: "Ctrl-ArrowDown", run: moveLineDown, preventDefault: true },
+        // Alt版も追加（VSCode準拠、Macでも使いやすい）
+        { key: "Alt-ArrowUp", run: moveLineUp, preventDefault: true },
+        { key: "Alt-ArrowDown", run: moveLineDown, preventDefault: true },
+      ]);
+      
       setExtensions([
         markdownExt, 
         wikiLinkExt, 
         EditorView.lineWrapping, 
         ...richTheme,
         ...customExt,  // タグとWikiリンクのハイライト
+        lineMovementKeymap,  // 行移動ショートカット
       ]);
     };
     loadExtensions();
@@ -365,6 +377,12 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
     setIsDragOver(false);
 
     const files = Array.from(e.dataTransfer.files);
+    await handleFilesUpload(files);
+  };
+
+  // ファイルアップロード共通処理（D&D、ボタン両方で使用）
+  const handleFilesUpload = async (files: File[]) => {
+    if (files.length === 0) return;
     
     try {
       setIsUploading(true);
@@ -378,7 +396,9 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
       files.forEach((file, index) => {
         const result = results[index];
         if (result.url) {
-          insertText += `![${file.name}](${result.url})\n`;
+          // 改行なしで追加（複数ファイルの場合はスペースで区切る）
+          if (insertText) insertText += ' ';
+          insertText += `![${file.name}](${result.url})`;
         } else if (result.error) {
           errors.push(`${file.name}: ${result.error}`);
         }
@@ -389,13 +409,35 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
       }
       
       if (insertText) {
-        const newContent = content + insertText;
-        setContent(newContent);
-        handleContentChange(newContent);
+        // カーソル位置に挿入
+        const view = editorRef.current?.view;
+        if (view) {
+          const pos = view.state.selection.main.head;
+          view.dispatch({
+            changes: { from: pos, to: pos, insert: insertText },
+            selection: { anchor: pos + insertText.length },
+          });
+          // コンテンツを更新（自動保存をトリガー）
+          const newContent = view.state.doc.toString();
+          handleContentChange(newContent);
+          // フォーカスを復帰
+          view.focus();
+        } else {
+          // フォールバック: 末尾に追加
+          const newContent = content + insertText;
+          setContent(newContent);
+          handleContentChange(newContent);
+        }
       }
     } finally {
       setIsUploading(false);
     }
+  };
+
+  // ツールバーからのファイル選択ハンドラ
+  const handleFileSelect = (fileList: FileList) => {
+    const files = Array.from(fileList);
+    handleFilesUpload(files);
   };
 
   // 削除ハンドラ（編集モードのみ）
@@ -603,6 +645,8 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
               <EditorToolbar 
                 onInsertTable={handleInsertTable}
                 onFormatTable={handleFormatTable}
+                onFileSelect={handleFileSelect}
+                isUploading={isUploading}
               />
 
               <div
@@ -618,7 +662,6 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
                   <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 rounded">
                     <div className="flex flex-col items-center gap-2 text-primary">
                       <Upload className="h-8 w-8" />
-                      <span>ファイルをドロップ</span>
                     </div>
                   </div>
                 )}
