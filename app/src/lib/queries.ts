@@ -3,6 +3,8 @@ import { auth } from '@/lib/auth'
 import { cache } from 'react'
 import { Note } from '@/lib/types'
 import { UnauthorizedError } from '@/lib/errors'
+import { createNoteWhereInput } from '@/lib/search-parser'
+import type { Prisma } from '@prisma/client'
 
 // デフォルトの1ページあたりの件数
 export const DEFAULT_PAGE_SIZE = 20
@@ -53,29 +55,27 @@ export async function getNotesPage(
   const take = limit + 1
 
   // フィルタ条件を構築
-  const where: any = {}
+  const baseWhere: Prisma.NoteWhereInput = {}
   
   // アーカイブフィルタ（デフォルトでアーカイブを除外）
   if (!includeArchived) {
-    where.isArchived = false
+    baseWhere.isArchived = false
   }
   
   if (tag) {
     if (tag === '__untagged__') {
       // タグなしのノート: tags が空配列 "[]" のもの
-      where.tags = { equals: '[]' }
+      baseWhere.tags = { equals: '[]' }
     } else {
       // SQLite の JSON には LIKE で対応
-      where.tags = { contains: `"${tag}"` }
+      baseWhere.tags = { contains: `"${tag}"` }
     }
   }
   
-  if (search) {
-    where.OR = [
-      { title: { contains: search } },
-      { content: { contains: search } },
-    ]
-  }
+  // 検索クエリをパース（Googleライクな構文対応）
+  const where = search 
+    ? createNoteWhereInput(search, baseWhere)
+    : baseWhere
 
   const notes = await prisma.note.findMany({
     where,

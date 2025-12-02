@@ -9,7 +9,6 @@ import { Note } from '@/lib/types';
 import { extractTags, cn } from '@/lib/utils';
 import { createTableTemplate, convertTsvToMd, formatMarkdownTable, findTableRange } from '@/lib/table-utils';
 import { DashboardLayout } from '@/components/layout';
-import { mPlus1Code } from '@/app/fonts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { EditorToolbar } from '@/components/EditorToolbar';
@@ -30,45 +29,16 @@ const getMarkdownExtension = async () => {
   return markdown({ codeLanguages: languages });
 };
 
-// テーマを動的インポート
-const getEditorTheme = async () => {
-  const { createTheme } = await import('@uiw/codemirror-themes');
-  const { githubLight, githubDark } = await import('@uiw/codemirror-theme-github');
-  return createTheme({ light: githubLight, dark: githubDark });
+// リッチMarkdownテーマを動的インポート
+const getRichMarkdownTheme = async () => {
+  const { richMarkdownTheme } = await import('@/components/editor/theme-extension');
+  return richMarkdownTheme;
 };
 
-// カスタムスタイルを動的インポート
-const getCustomStyles = async () => {
-  const { EditorView } = await import('@codemirror/view');
-  return EditorView.theme({
-    '&': {
-      fontSize: '15px',
-      fontFamily: `var(${mPlus1Code.variable}), 'M PLUS 1 Code', 'monospace'`,
-    },
-    '.cm-content': {
-      padding: '12px 16px',
-      lineHeight: '1.6',
-    },
-    '.cm-activeLine': {
-      backgroundColor: '#f0f8ff',
-    },
-    '.cm-header': {
-      fontWeight: 'bold',
-      color: '#0550ae',
-    },
-    '.cm-header-1': { fontSize: '1.4em' },
-    '.cm-header-2': { fontSize: '1.25em' },
-    '.cm-header-3': { fontSize: '1.1em' },
-    '.cm-link': {
-      color: '#0969da',
-    },
-    '.cm-strong': {
-      fontWeight: 'bold',
-    },
-    '.cm-emphasis': {
-      fontStyle: 'italic',
-    },
-  });
+// カスタムハイライター（タグ、Wikiリンク）を動的インポート
+const getCustomHighlighters = async () => {
+  const { customHighlighters } = await import('@/components/editor/extensions');
+  return customHighlighters;
 };
 
 // Wikiリンク用オートコンプリート
@@ -186,9 +156,15 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
       const { EditorView } = await import('@codemirror/view');
       const markdownExt = await getMarkdownExtension();
       const wikiLinkExt = await getWikiLinkCompletion(noteTitles);
-      const theme = await getEditorTheme();
-      const customStyles = await getCustomStyles();
-      setExtensions([markdownExt, wikiLinkExt, EditorView.lineWrapping, theme, customStyles]);
+      const richTheme = await getRichMarkdownTheme();
+      const customExt = await getCustomHighlighters();
+      setExtensions([
+        markdownExt, 
+        wikiLinkExt, 
+        EditorView.lineWrapping, 
+        ...richTheme,
+        ...customExt,  // タグとWikiリンクのハイライト
+      ]);
     };
     loadExtensions();
   }, [noteTitles]);
@@ -233,8 +209,8 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
             setTitle(record.title);
             setContent(record.content || '');
             setAllNotes(notes);
-            // コンテンツがある場合はプレビュー、ない場合は編集をデフォルトに
-            setActiveTab(record.content ? 'preview' : 'write');
+            // 編集モードでは常に編集タブをデフォルトに
+            // （プレビューを見たい場合はユーザーが手動で切り替える）
           }
         }
       } catch (err) {
