@@ -19,6 +19,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@uiw/codemirror-theme-github": "^4.25.3",
     "@uiw/codemirror-theme-tokyo-night": "^4.25.3",
+    "@uiw/codemirror-themes": "^4.25.3",
     "@uiw/react-codemirror": "^4.25.3",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",

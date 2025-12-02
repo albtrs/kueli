@@ -72,6 +72,7 @@ export function DesktopSidebar() {
 
   const handleTagClick = (tagName: string) => {
     router.push(`/?tag=${encodeURIComponent(tagName)}`);
+    router.refresh();
   };
 
   return (

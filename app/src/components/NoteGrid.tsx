@@ -244,8 +244,16 @@ function NoteCard({
       className="cursor-pointer transition-all hover:border-foreground/20 group overflow-hidden relative"
       onClick={onClick}
     >
-      {/* コンテキストメニュー */}
-      <div className="absolute top-1.5 right-1.5 z-10">
+      {/* 右上のアクションエリア: ピン留めアイコン + コンテキストメニュー */}
+      <div className="absolute top-1.5 right-1.5 z-10 flex items-center gap-1">
+        {/* ピン留めインジケータ */}
+        {note.isPinned && (
+          <div className="p-1 rounded-md bg-primary text-primary-foreground">
+            <Pin className="h-3 w-3 fill-current" />
+          </div>
+        )}
+        
+        {/* コンテキストメニュー */}
         <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
           <DropdownMenuTrigger asChild>
             <button
@@ -272,15 +280,6 @@ function NoteCard({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-
-      {/* ピン留めインジケータ */}
-      {note.isPinned && (
-        <div className="absolute top-1.5 left-1.5 z-10">
-          <div className="p-1 rounded-md bg-primary text-primary-foreground">
-            <Pin className="h-3 w-3 fill-current" />
-          </div>
-        </div>
-      )}
 
       {/* 添付ファイル（画像/動画） */}
       {hasMedia && (

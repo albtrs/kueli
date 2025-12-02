@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "メモアプリ",
-  description: "Next.js + Prisma + NextAuthを使用したMarkdownメモアプリ",
+  title: "kueli",
+  description: "Markdownメモアプリ",
 };
 
 export default function RootLayout({

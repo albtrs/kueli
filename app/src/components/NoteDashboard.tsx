@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Note } from '@/lib/types';
 import { NoteGrid } from '@/components/NoteGrid';
@@ -26,6 +26,15 @@ export function NoteDashboard({
   const router = useRouter();
   const [pinnedNotes, setPinnedNotes] = useState<Note[]>(initialPinnedNotes);
   const [recentNotes, setRecentNotes] = useState<Note[]>(initialNotes);
+
+  // propsが変更されたらstateを更新
+  useEffect(() => {
+    setPinnedNotes(initialPinnedNotes);
+  }, [initialPinnedNotes]);
+
+  useEffect(() => {
+    setRecentNotes(initialNotes);
+  }, [initialNotes]);
 
   // ノートの更新（ピン留め切り替え時）
   const handleNoteUpdate = useCallback((updatedNote: Note) => {

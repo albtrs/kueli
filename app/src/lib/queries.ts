@@ -35,18 +35,16 @@ function parseNote(dbNote: any): Note {
  * @param tag - タグでフィルタ（オプション）
  * @param search - 検索クエリ（オプション）
  */
-export const getNotesPage = cache(async (
+export async function getNotesPage(
   cursor: string | null = null,
   limit: number = DEFAULT_PAGE_SIZE,
   tag?: string,
   search?: string
-): Promise<NotesPage> => {
+): Promise<NotesPage> {
   const session = await auth()
   if (!session?.user) {
     throw new UnauthorizedError()
   }
-
-  console.log(`📦 getNotesPage: cursor=${cursor}, limit=${limit}, tag=${tag}, search=${search}`)
 
   // 1件多く取得して hasMore を判定
   const take = limit + 1
@@ -90,7 +88,7 @@ export const getNotesPage = cache(async (
     nextCursor,
     hasMore,
   }
-})
+}
 
 /**
  * 全ノート取得（Request Memoization 適用）
@@ -104,8 +102,6 @@ export const getNotes = cache(async (): Promise<Note[]> => {
     throw new UnauthorizedError()
   }
 
-  console.log('📦 getNotes: Fetching from DB...')
-  
   const notes = await prisma.note.findMany({
     orderBy: { updatedAt: 'desc' },
   })
@@ -122,8 +118,6 @@ export const getNote = cache(async (id: string): Promise<Note | null> => {
   if (!session?.user) {
     throw new UnauthorizedError()
   }
-
-  console.log(`📦 getNote(${id}): Fetching from DB...`)
 
   const note = await prisma.note.findUnique({
     where: { id },

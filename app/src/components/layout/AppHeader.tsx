@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Menu, Plus, Search, X } from 'lucide-react';
+import { Menu, Plus, Search } from 'lucide-react';
 
 interface AppHeaderProps {
   onOpenLeftDrawer: () => void;
@@ -14,10 +14,14 @@ interface AppHeaderProps {
 export function AppHeader({ onOpenLeftDrawer, onOpenRightDrawer }: AppHeaderProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const selectedTag = searchParams.get('tag');
   const currentQuery = searchParams.get('q') || '';
   
   const [searchQuery, setSearchQuery] = useState(currentQuery);
+
+  // URLパラメータの変更を検索クエリに同期
+  useEffect(() => {
+    setSearchQuery(currentQuery);
+  }, [currentQuery]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,18 +34,12 @@ export function AppHeader({ onOpenLeftDrawer, onOpenRightDrawer }: AppHeaderProp
     }
     
     router.push(`/?${params.toString()}`);
-  };
-
-  const handleClearFilters = () => {
-    setSearchQuery('');
-    router.push('/');
+    router.refresh();
   };
 
   const handleCreateNote = () => {
     router.push('/notes/new');
   };
-
-  const hasFilters = selectedTag || currentQuery;
 
   return (
     <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -65,23 +63,6 @@ export function AppHeader({ onOpenLeftDrawer, onOpenRightDrawer }: AppHeaderProp
           >
             <span>Kueli</span>
           </button>
-          
-          {/* フィルタ表示 */}
-          {hasFilters && (
-            <div className="flex items-center gap-1 ml-2">
-              <span className="text-sm text-muted-foreground">
-                {selectedTag ? `#${selectedTag}` : currentQuery}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={handleClearFilters}
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          )}
         </div>
         
         {/* 中央：スペーサー（PCのみ） */}

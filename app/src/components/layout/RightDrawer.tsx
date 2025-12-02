@@ -92,11 +92,13 @@ export function RightDrawer({ isOpen, onClose }: RightDrawerProps) {
     }
     
     router.push(`/?${params.toString()}`);
+    router.refresh();
     onClose();
   };
 
   const handleTagClick = (tagName: string) => {
     router.push(`/?tag=${encodeURIComponent(tagName)}`);
+    router.refresh();
     onClose();
   };
 
@@ -104,6 +106,7 @@ export function RightDrawer({ isOpen, onClose }: RightDrawerProps) {
     const params = new URLSearchParams(searchParams.toString());
     params.delete('tag');
     router.push(`/?${params.toString()}`);
+    router.refresh();
   };
 
   return (
