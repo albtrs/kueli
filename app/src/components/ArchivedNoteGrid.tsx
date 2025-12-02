@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Note } from '@/lib/types';
 import { fetchNotesPage, toggleArchive, deleteNote } from '@/actions/note';
 import { formatDateJST, stripMarkdown } from '@/lib/utils';
@@ -28,7 +28,6 @@ export function ArchivedNoteGrid({
   initialCursor,
   initialHasMore,
 }: ArchivedNoteGridProps) {
-  const router = useRouter();
   const [displayNotes, setDisplayNotes] = useState<Note[]>(initialNotes);
   const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [hasMore, setHasMore] = useState(initialHasMore);
@@ -107,7 +106,6 @@ export function ArchivedNoteGrid({
           <ArchivedNoteCard
             key={note.id}
             note={note}
-            onClick={() => router.push(`/notes/${note.id}`)}
             onRestore={handleRestore}
             onDelete={handleDelete}
           />
@@ -133,12 +131,10 @@ export function ArchivedNoteGrid({
 
 function ArchivedNoteCard({
   note,
-  onClick,
   onRestore,
   onDelete,
 }: {
   note: Note;
-  onClick: () => void;
   onRestore: (noteId: string) => void;
   onDelete: (noteId: string) => void;
 }) {
@@ -196,6 +192,7 @@ function ArchivedNoteCard({
 
   // 復元（アーカイブ解除）
   const handleRestore = async (e: React.MouseEvent) => {
+    e.preventDefault(); // リンクのナビゲーションを防止
     e.stopPropagation();
     try {
       await toggleArchive(note.id);
@@ -207,6 +204,7 @@ function ArchivedNoteCard({
 
   // 削除
   const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault(); // リンクのナビゲーションを防止
     e.stopPropagation();
     if (!confirm('このメモを完全に削除しますか？この操作は取り消せません。')) return;
     try {
@@ -218,10 +216,10 @@ function ArchivedNoteCard({
   };
 
   return (
-    <Card
-      className="cursor-pointer transition-all hover:border-foreground/20 group overflow-hidden relative opacity-75 hover:opacity-100"
-      onClick={onClick}
-    >
+    <Link href={`/notes/${note.id}`} className="block">
+      <Card
+        className="cursor-pointer transition-all hover:border-foreground/20 group overflow-hidden relative opacity-75 hover:opacity-100 h-full"
+      >
       {/* コンテキストメニュー */}
       <div className="absolute top-1.5 right-1.5 z-10">
         <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
@@ -230,7 +228,10 @@ function ArchivedNoteCard({
               className={`p-1.5 rounded-md bg-background/80 backdrop-blur-sm border border-border/50 transition-opacity ${
                 isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
               }`}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.preventDefault(); // リンクのナビゲーションを防止
+                e.stopPropagation();
+              }}
             >
               <MoreVertical className="h-4 w-4 text-muted-foreground" />
             </button>
@@ -368,6 +369,7 @@ function ArchivedNoteCard({
         </div>
       </CardContent>
     </Card>
+    </Link>
   );
 }
 

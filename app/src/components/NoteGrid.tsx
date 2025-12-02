@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Note } from '@/lib/types';
 import { fetchNotesPage, togglePin, toggleArchive, deleteNote } from '@/actions/note';
 import { formatDateJST, stripMarkdown } from '@/lib/utils';
@@ -45,8 +45,6 @@ export function NoteGrid({
   onNoteDelete,
   onNoteArchive,
 }: NoteGridProps) {
-  const router = useRouter();
-  
   // 無限スクロールモードかどうか
   const isInfiniteMode = initialNotes !== undefined;
   
@@ -144,7 +142,6 @@ export function NoteGrid({
           <NoteCard
             key={note.id}
             note={note}
-            onClick={() => router.push(`/notes/${note.id}`)}
             onUpdate={handleNoteUpdate}
             onDelete={handleNoteDelete}
             onArchive={handleNoteArchive}
@@ -171,13 +168,11 @@ export function NoteGrid({
 
 function NoteCard({ 
   note, 
-  onClick,
   onUpdate,
   onDelete,
   onArchive,
 }: { 
   note: Note; 
-  onClick: () => void;
   onUpdate?: (note: Note) => void;
   onDelete?: (noteId: string) => void;
   onArchive?: (noteId: string, isArchived: boolean) => void;
@@ -239,6 +234,7 @@ function NoteCard({
 
   // ピン留め切り替え
   const handleTogglePin = async (e: React.MouseEvent) => {
+    e.preventDefault(); // リンクのナビゲーションを防止
     e.stopPropagation();
     try {
       const updated = await togglePin(note.id);
@@ -250,6 +246,7 @@ function NoteCard({
 
   // 削除
   const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault(); // リンクのナビゲーションを防止
     e.stopPropagation();
     if (!confirm('このメモを削除しますか？')) return;
     try {
@@ -262,6 +259,7 @@ function NoteCard({
 
   // アーカイブ切り替え
   const handleToggleArchive = async (e: React.MouseEvent) => {
+    e.preventDefault(); // リンクのナビゲーションを防止
     e.stopPropagation();
     try {
       const updated = await toggleArchive(note.id);
@@ -272,10 +270,10 @@ function NoteCard({
   };
 
   return (
-    <Card
-      className="cursor-pointer transition-all hover:border-foreground/20 group overflow-hidden relative"
-      onClick={onClick}
-    >
+    <Link href={`/notes/${note.id}`} className="block">
+      <Card
+        className="cursor-pointer transition-all hover:border-foreground/20 group overflow-hidden relative h-full"
+      >
       {/* 右上のアクションエリア: ピン留めアイコン + コンテキストメニュー */}
       <div className="absolute top-1.5 right-1.5 z-10 flex items-center gap-1">
         {/* アーカイブインジケータ */}
@@ -298,7 +296,10 @@ function NoteCard({
               className={`p-1.5 rounded-md bg-background/80 backdrop-blur-sm border border-border/50 transition-opacity ${
                 isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
               }`}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.preventDefault(); // リンクのナビゲーションを防止
+                e.stopPropagation();
+              }}
             >
               <MoreVertical className="h-4 w-4 text-muted-foreground" />
             </button>
@@ -441,12 +442,10 @@ function NoteCard({
         )}
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>{formatDateJST(note.updatedAt)}</span>
-          {note.tags && note.tags.length > 0 && (
-            <span className="truncate ml-2 text-[10px]">#{note.tags[0]}{note.tags.length > 1 && ` +${note.tags.length - 1}`}</span>
-          )}
         </div>
       </CardContent>
     </Card>
+    </Link>
   );
 }
 

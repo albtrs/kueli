@@ -124,7 +124,8 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
   const [extensions, setExtensions] = useState<any[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'write' | 'preview'>('write');
+  // 新規作成時は編集モード、編集時はプレビューモードをデフォルトに
+  const [activeTab, setActiveTab] = useState<'write' | 'preview'>(isNewMode ? 'write' : 'preview');
   const [editorReady, setEditorReady] = useState(false);
   const [allNotes, setAllNotes] = useState<Note[]>([]);
 
