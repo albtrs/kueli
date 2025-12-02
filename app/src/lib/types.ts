@@ -3,6 +3,7 @@ export interface Note {
   title: string;
   content: string;
   isPinned: boolean;
+  isArchived: boolean;
   tags: string[]; // Parsed from JSON string in DB
   images: string[]; // Parsed from JSON string in DB
   createdAt: Date;
@@ -21,6 +22,7 @@ export interface NoteUpdateData {
   title?: string;
   content?: string;
   isPinned?: boolean;
+  isArchived?: boolean;
   tags?: string[];
   images?: string[];
 }

@@ -22,6 +22,7 @@ function parseNote(dbNote: any): Note {
     title: dbNote.title,
     content: dbNote.content,
     isPinned: dbNote.isPinned,
+    isArchived: dbNote.isArchived,
     tags: JSON.parse(dbNote.tags || '[]'),
     images: JSON.parse(dbNote.images || '[]'),
     createdAt: dbNote.createdAt,
@@ -35,12 +36,14 @@ function parseNote(dbNote: any): Note {
  * @param limit - 取得件数（デフォルト20）
  * @param tag - タグでフィルタ（オプション）
  * @param search - 検索クエリ（オプション）
+ * @param includeArchived - アーカイブ済みを含める（デフォルトfalse）
  */
 export async function fetchNotesPage(
   cursor: string | null = null,
   limit: number = DEFAULT_PAGE_SIZE,
   tag?: string,
-  search?: string
+  search?: string,
+  includeArchived: boolean = false
 ): Promise<NotesPageResult> {
   try {
     const session = await auth()
@@ -53,6 +56,11 @@ export async function fetchNotesPage(
 
     // フィルタ条件を構築
     const where: any = {}
+    
+    // アーカイブフィルタ（デフォルトでアーカイブを除外）
+    if (!includeArchived) {
+      where.isArchived = false
+    }
     
     if (tag) {
       if (tag === '__untagged__') {
@@ -98,15 +106,22 @@ export async function fetchNotesPage(
 /**
  * 全ノート取得（Client Component 用 Server Action）
  * Server Components は lib/queries.ts の getNotes を使用すること（cache適用）
+ * @param includeArchived - アーカイブ済みを含める（デフォルトfalse）
  */
-export async function fetchNotes(): Promise<Note[]> {
+export async function fetchNotes(includeArchived: boolean = false): Promise<Note[]> {
   try {
     const session = await auth()
     if (!session?.user) {
       throw new UnauthorizedError()
     }
 
+    const where: any = {}
+    if (!includeArchived) {
+      where.isArchived = false
+    }
+
     const notes = await prisma.note.findMany({
+      where,
       orderBy: { updatedAt: 'desc' },
     })
 
@@ -151,6 +166,7 @@ export async function saveNote(id: string | null, data: NoteCreateData | NoteUpd
       title: data.title || '無題のメモ',
       content: data.content || '',
       isPinned: data.isPinned || false,
+      isArchived: ('isArchived' in data ? data.isArchived : false) || false,
       tags: JSON.stringify(data.tags || []),
       images: JSON.stringify(data.images || []),
     }
@@ -216,6 +232,33 @@ export async function togglePin(id: string): Promise<Note> {
     return parseNote(updated)
   } catch (error) {
     console.error('togglePin error:', handleServerActionError(error))
+    throw error
+  }
+}
+
+export async function toggleArchive(id: string): Promise<Note> {
+  try {
+    const session = await auth()
+    if (!session?.user) {
+      throw new UnauthorizedError()
+    }
+
+    const note = await prisma.note.findUnique({ where: { id } })
+    if (!note) throw new NotFoundError('Note not found')
+
+    const updated = await prisma.note.update({
+      where: { id },
+      data: { 
+        isArchived: !note.isArchived,
+        // アーカイブ時はピン留めを解除
+        ...(note.isArchived === false && { isPinned: false }),
+      },
+    })
+
+    revalidatePath('/')
+    return parseNote(updated)
+  } catch (error) {
+    console.error('toggleArchive error:', handleServerActionError(error))
     throw error
   }
 }

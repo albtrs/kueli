@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Note } from '@/lib/types';
-import { fetchNotesPage, togglePin, toggleArchive, deleteNote } from '@/actions/note';
+import { fetchNotesPage, toggleArchive, deleteNote } from '@/actions/note';
 import { formatDateJST, stripMarkdown } from '@/lib/utils';
 import { extractYouTubeThumbnail, extractTweetId, extractFirstExternalLink } from '@/lib/media-utils';
 import { extractFirstMedia } from '@/lib/file-utils';
@@ -15,71 +15,56 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Play, Link as LinkIcon, Loader2, MoreVertical, Pin, Trash2, Archive, ArchiveRestore } from 'lucide-react';
+import { Play, Link as LinkIcon, Loader2, MoreVertical, Trash2, ArchiveRestore, FileText } from 'lucide-react';
 
-interface NoteGridProps {
-  // 従来の静的表示用（ピン留めセクションなど）
-  notes?: Note[];
-  // 無限スクロール用
-  initialNotes?: Note[];
-  initialCursor?: string | null;
-  initialHasMore?: boolean;
-  tag?: string;
-  search?: string;
-  includeArchived?: boolean;
-  // 親コンポーネントへのコールバック（ピン留めセクション連動用）
-  onNoteUpdate?: (note: Note) => void;
-  onNoteDelete?: (noteId: string) => void;
-  onNoteArchive?: (noteId: string, isArchived: boolean) => void;
+interface ArchivedNoteGridProps {
+  initialNotes: Note[];
+  initialCursor: string | null;
+  initialHasMore: boolean;
 }
 
-export function NoteGrid({ 
-  notes,
+export function ArchivedNoteGrid({
   initialNotes,
   initialCursor,
-  initialHasMore = false,
-  tag,
-  search,
-  includeArchived = false,
-  onNoteUpdate,
-  onNoteDelete,
-  onNoteArchive,
-}: NoteGridProps) {
+  initialHasMore,
+}: ArchivedNoteGridProps) {
   const router = useRouter();
-  
-  // 無限スクロールモードかどうか
-  const isInfiniteMode = initialNotes !== undefined;
-  
-  // 無限スクロール用の状態
-  const [displayNotes, setDisplayNotes] = useState<Note[]>(initialNotes || notes || []);
-  const [cursor, setCursor] = useState<string | null>(initialCursor || null);
+  const [displayNotes, setDisplayNotes] = useState<Note[]>(initialNotes);
+  const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [isLoading, setIsLoading] = useState(false);
-  
-  // Intersection Observer 用の ref
   const loadMoreRef = useRef<HTMLDivElement>(null);
-  
-  // 追加読み込み
+
+  // propsが変更されたらstateを更新
+  useEffect(() => {
+    setDisplayNotes(initialNotes);
+    setCursor(initialCursor);
+    setHasMore(initialHasMore);
+  }, [initialNotes, initialCursor, initialHasMore]);
+
+  // 追加読み込み（アーカイブのみ）
   const loadMore = useCallback(async () => {
-    if (!isInfiniteMode || isLoading || !hasMore) return;
-    
+    if (isLoading || !hasMore) return;
+
     setIsLoading(true);
     try {
-      const result = await fetchNotesPage(cursor, 20, tag, search, includeArchived);
-      setDisplayNotes(prev => [...prev, ...result.notes]);
+      const result = await fetchNotesPage(cursor, 20, undefined, undefined, true);
+      // アーカイブされたノートのみをフィルタ
+      const archivedNotes = result.notes.filter(note => note.isArchived);
+      setDisplayNotes(prev => [...prev, ...archivedNotes]);
       setCursor(result.nextCursor);
       setHasMore(result.hasMore);
     } catch (error) {
-      console.error('Failed to load more notes:', error);
+      console.error('Failed to load more archived notes:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [isInfiniteMode, isLoading, hasMore, cursor, tag, search, includeArchived]);
-  
+  }, [isLoading, hasMore, cursor]);
+
   // Intersection Observer で自動読み込み
   useEffect(() => {
-    if (!isInfiniteMode || !hasMore) return;
-    
+    if (!hasMore) return;
+
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !isLoading) {
@@ -88,72 +73,49 @@ export function NoteGrid({
       },
       { threshold: 0.1, rootMargin: '100px' }
     );
-    
+
     if (loadMoreRef.current) {
       observer.observe(loadMoreRef.current);
     }
-    
+
     return () => observer.disconnect();
-  }, [isInfiniteMode, hasMore, isLoading, loadMore]);
-  
-  // タグや検索が変わったらリセット（page.tsx 側で initialNotes が変わる）
-  // notes（静的モード）の変更も監視
-  useEffect(() => {
-    if (notes) {
-      // 静的モード：notes が変わったら displayNotes を更新
-      setDisplayNotes(notes);
-    } else if (initialNotes) {
-      // 無限スクロールモード
-      setDisplayNotes(initialNotes);
-      setCursor(initialCursor || null);
-      setHasMore(initialHasMore);
-    }
-  }, [notes, initialNotes, initialCursor, initialHasMore]);
+  }, [hasMore, isLoading, loadMore]);
 
-  // ノートの更新（ピン留め切り替え時）
-  const handleNoteUpdate = useCallback((updatedNote: Note) => {
-    setDisplayNotes(prev => prev.map(n => n.id === updatedNote.id ? updatedNote : n));
-    // 親コンポーネントにも通知（ピン留めセクション連動）
-    onNoteUpdate?.(updatedNote);
-  }, [onNoteUpdate]);
-
-  // ノートの削除
-  const handleNoteDelete = useCallback((noteId: string) => {
+  // ノート復元時にリストから削除
+  const handleRestore = useCallback((noteId: string) => {
     setDisplayNotes(prev => prev.filter(n => n.id !== noteId));
-    // 親コンポーネントにも通知
-    onNoteDelete?.(noteId);
-  }, [onNoteDelete]);
+  }, []);
 
-  // アーカイブ切り替え
-  const handleNoteArchive = useCallback((noteId: string, isArchived: boolean) => {
-    if (isArchived && !includeArchived) {
-      // アーカイブされた場合、リストから削除
-      setDisplayNotes(prev => prev.filter(n => n.id !== noteId));
-    } else {
-      // 復元された場合、または includeArchived=true の場合は更新
-      setDisplayNotes(prev => prev.map(n => n.id === noteId ? { ...n, isArchived } : n));
-    }
-    // 親コンポーネントにも通知
-    onNoteArchive?.(noteId, isArchived);
-  }, [includeArchived, onNoteArchive]);
+  // ノート削除
+  const handleDelete = useCallback((noteId: string) => {
+    setDisplayNotes(prev => prev.filter(n => n.id !== noteId));
+  }, []);
+
+  if (displayNotes.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <FileText className="h-10 w-10 text-muted-foreground mb-3" />
+        <p className="text-muted-foreground text-sm">アーカイブされたメモはありません</p>
+      </div>
+    );
+  }
 
   return (
     <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {displayNotes.map((note) => (
-          <NoteCard
+          <ArchivedNoteCard
             key={note.id}
             note={note}
             onClick={() => router.push(`/notes/${note.id}`)}
-            onUpdate={handleNoteUpdate}
-            onDelete={handleNoteDelete}
-            onArchive={handleNoteArchive}
+            onRestore={handleRestore}
+            onDelete={handleDelete}
           />
         ))}
       </div>
-      
+
       {/* 無限スクロールのトリガー要素 */}
-      {isInfiniteMode && hasMore && (
+      {hasMore && (
         <div ref={loadMoreRef} className="flex justify-center py-8">
           {isLoading ? (
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -169,34 +131,30 @@ export function NoteGrid({
   );
 }
 
-function NoteCard({ 
-  note, 
+function ArchivedNoteCard({
+  note,
   onClick,
-  onUpdate,
+  onRestore,
   onDelete,
-  onArchive,
-}: { 
-  note: Note; 
+}: {
+  note: Note;
   onClick: () => void;
-  onUpdate?: (note: Note) => void;
-  onDelete?: (noteId: string) => void;
-  onArchive?: (noteId: string, isArchived: boolean) => void;
+  onRestore: (noteId: string) => void;
+  onDelete: (noteId: string) => void;
 }) {
   const media = extractFirstMedia(note.content, note.images || []);
   const youtubeThumbnail = !media ? extractYouTubeThumbnail(note.content) : null;
   const tweetId = !media && !youtubeThumbnail ? extractTweetId(note.content) : null;
   const externalLink = !media && !youtubeThumbnail && !tweetId ? extractFirstExternalLink(note.content) : null;
-  
+
   const [ogpImage, setOgpImage] = useState<string | null>(null);
   const [tweetImage, setTweetImage] = useState<string | null>(null);
-  const [ogpLoading, setOgpLoading] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  
+
   // OGP画像を取得
   useEffect(() => {
     if (!externalLink) return;
-    
-    setOgpLoading(true);
+
     fetch(`/api/ogp?url=${encodeURIComponent(externalLink)}`)
       .then(res => res.ok ? res.json() : null)
       .then(data => {
@@ -204,14 +162,13 @@ function NoteCard({
           setOgpImage(data.image);
         }
       })
-      .catch(() => {})
-      .finally(() => setOgpLoading(false));
+      .catch(() => {});
   }, [externalLink]);
 
   // Twitterの画像を取得
   useEffect(() => {
     if (!tweetId) return;
-    
+
     fetch(`/api/tweet?id=${tweetId}`)
       .then(res => res.ok ? res.json() : null)
       .then(data => {
@@ -221,7 +178,7 @@ function NoteCard({
       })
       .catch(() => {});
   }, [tweetId]);
-  
+
   const hasMedia = media !== null;
   const hasThumbnail = hasMedia || youtubeThumbnail || tweetImage || ogpImage;
   const excerpt = stripMarkdown(note.content || '').slice(0, 80);
@@ -230,68 +187,43 @@ function NoteCard({
     e.stopPropagation();
     const video = e.currentTarget;
     if (action === 'play') {
-      video.play().catch(() => {}); // 自動再生がブロックされた場合のエラーを無視
+      video.play().catch(() => {});
     } else {
       video.pause();
       video.currentTime = 0;
     }
   };
 
-  // ピン留め切り替え
-  const handleTogglePin = async (e: React.MouseEvent) => {
+  // 復元（アーカイブ解除）
+  const handleRestore = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      const updated = await togglePin(note.id);
-      onUpdate?.(updated);
+      await toggleArchive(note.id);
+      onRestore(note.id);
     } catch (error) {
-      console.error('Failed to toggle pin:', error);
+      console.error('Failed to restore note:', error);
     }
   };
 
   // 削除
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('このメモを削除しますか？')) return;
+    if (!confirm('このメモを完全に削除しますか？この操作は取り消せません。')) return;
     try {
       await deleteNote(note.id);
-      onDelete?.(note.id);
+      onDelete(note.id);
     } catch (error) {
       console.error('Failed to delete note:', error);
     }
   };
 
-  // アーカイブ切り替え
-  const handleToggleArchive = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      const updated = await toggleArchive(note.id);
-      onArchive?.(note.id, updated.isArchived);
-    } catch (error) {
-      console.error('Failed to toggle archive:', error);
-    }
-  };
-
   return (
     <Card
-      className="cursor-pointer transition-all hover:border-foreground/20 group overflow-hidden relative"
+      className="cursor-pointer transition-all hover:border-foreground/20 group overflow-hidden relative opacity-75 hover:opacity-100"
       onClick={onClick}
     >
-      {/* 右上のアクションエリア: ピン留めアイコン + コンテキストメニュー */}
-      <div className="absolute top-1.5 right-1.5 z-10 flex items-center gap-1">
-        {/* アーカイブインジケータ */}
-        {note.isArchived && (
-          <div className="p-1 rounded-md bg-muted text-muted-foreground">
-            <Archive className="h-3 w-3" />
-          </div>
-        )}
-        {/* ピン留めインジケータ */}
-        {note.isPinned && (
-          <div className="p-1 rounded-md bg-primary text-primary-foreground">
-            <Pin className="h-3 w-3 fill-current" />
-          </div>
-        )}
-        
-        {/* コンテキストメニュー */}
+      {/* コンテキストメニュー */}
+      <div className="absolute top-1.5 right-1.5 z-10">
         <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
           <DropdownMenuTrigger asChild>
             <button
@@ -304,25 +236,12 @@ function NoteCard({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem onClick={handleTogglePin}>
-              <Pin className={`h-4 w-4 mr-2 ${note.isPinned ? 'fill-current' : ''}`} />
-              {note.isPinned ? 'ピン解除' : 'ピン留め'}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleToggleArchive}>
-              {note.isArchived ? (
-                <>
-                  <ArchiveRestore className="h-4 w-4 mr-2" />
-                  復元
-                </>
-              ) : (
-                <>
-                  <Archive className="h-4 w-4 mr-2" />
-                  アーカイブ
-                </>
-              )}
+            <DropdownMenuItem onClick={handleRestore}>
+              <ArchiveRestore className="h-4 w-4 mr-2" />
+              戻す
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={handleDelete}
               className="text-destructive focus:text-destructive"
             >
@@ -348,7 +267,6 @@ function NoteCard({
                 onMouseEnter={(e) => handleVideoHover(e, 'play')}
                 onMouseLeave={(e) => handleVideoHover(e, 'pause')}
               />
-              {/* 動画アイコン（ホバー時に非表示） */}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none group-hover:opacity-0 transition-opacity duration-200">
                 <div className="bg-black/50 rounded p-2">
                   <Play className="w-5 h-5 text-white fill-white" />
@@ -367,7 +285,7 @@ function NoteCard({
           )}
         </div>
       )}
-      
+
       {/* YouTubeサムネイル */}
       {!hasMedia && youtubeThumbnail && (
         <div className="relative aspect-video overflow-hidden bg-muted">
@@ -386,7 +304,7 @@ function NoteCard({
           </div>
         </div>
       )}
-      
+
       {/* Twitter/X サムネイル */}
       {!hasMedia && !youtubeThumbnail && tweetImage && (
         <div className="relative aspect-video overflow-hidden bg-muted">
@@ -407,7 +325,7 @@ function NoteCard({
           </div>
         </div>
       )}
-      
+
       {/* OGP画像 */}
       {!hasMedia && !youtubeThumbnail && !tweetImage && ogpImage && (
         <div className="relative aspect-video overflow-hidden bg-muted">
@@ -426,8 +344,8 @@ function NoteCard({
           </div>
         </div>
       )}
-      
-      <CardHeader className={hasThumbnail ? "pb-1.5 pt-2.5 px-3" : "pb-1.5 px-3"}>
+
+      <CardHeader className={hasThumbnail ? 'pb-1.5 pt-2.5 px-3' : 'pb-1.5 px-3'}>
         <CardTitle className="line-clamp-1 text-sm font-medium">
           {note.title || '無題'}
         </CardTitle>
@@ -442,7 +360,10 @@ function NoteCard({
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>{formatDateJST(note.updatedAt)}</span>
           {note.tags && note.tags.length > 0 && (
-            <span className="truncate ml-2 text-[10px]">#{note.tags[0]}{note.tags.length > 1 && ` +${note.tags.length - 1}`}</span>
+            <span className="truncate ml-2 text-[10px]">
+              #{note.tags[0]}
+              {note.tags.length > 1 && ` +${note.tags.length - 1}`}
+            </span>
           )}
         </div>
       </CardContent>
@@ -450,6 +371,5 @@ function NoteCard({
   );
 }
 
-// パフォーマンス最適化: React.memo でラップ
-const MemoizedNoteCard = memo(NoteCard);
-export { MemoizedNoteCard as NoteCard };
+const MemoizedArchivedNoteCard = memo(ArchivedNoteCard);
+export { MemoizedArchivedNoteCard as ArchivedNoteCard };

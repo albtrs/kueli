@@ -21,6 +21,7 @@ function parseNote(dbNote: any): Note {
     title: dbNote.title,
     content: dbNote.content,
     isPinned: dbNote.isPinned,
+    isArchived: dbNote.isArchived,
     tags: JSON.parse(dbNote.tags || '[]'),
     images: JSON.parse(dbNote.images || '[]'),
     createdAt: dbNote.createdAt,
@@ -34,12 +35,14 @@ function parseNote(dbNote: any): Note {
  * @param limit - 取得件数（デフォルト20）
  * @param tag - タグでフィルタ（オプション）
  * @param search - 検索クエリ（オプション）
+ * @param includeArchived - アーカイブ済みを含める（デフォルトfalse）
  */
 export async function getNotesPage(
   cursor: string | null = null,
   limit: number = DEFAULT_PAGE_SIZE,
   tag?: string,
-  search?: string
+  search?: string,
+  includeArchived: boolean = false
 ): Promise<NotesPage> {
   const session = await auth()
   if (!session?.user) {
@@ -51,6 +54,11 @@ export async function getNotesPage(
 
   // フィルタ条件を構築
   const where: any = {}
+  
+  // アーカイブフィルタ（デフォルトでアーカイブを除外）
+  if (!includeArchived) {
+    where.isArchived = false
+  }
   
   if (tag) {
     if (tag === '__untagged__') {
@@ -95,14 +103,21 @@ export async function getNotesPage(
  * 同一リクエスト内で複数回呼ばれてもDBアクセスは1回だけ
  * ※ Server Components 専用。Client Components は actions/note.ts の fetchNotes を使用
  * ※ サイドバー用（タグ集計・ピン留め用）に残す
+ * @param includeArchived - アーカイブ済みを含める（デフォルトfalse）
  */
-export const getNotes = cache(async (): Promise<Note[]> => {
+export const getNotes = cache(async (includeArchived: boolean = false): Promise<Note[]> => {
   const session = await auth()
   if (!session?.user) {
     throw new UnauthorizedError()
   }
 
+  const where: any = {}
+  if (!includeArchived) {
+    where.isArchived = false
+  }
+
   const notes = await prisma.note.findMany({
+    where,
     orderBy: { updatedAt: 'desc' },
   })
 

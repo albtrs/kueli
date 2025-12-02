@@ -66,6 +66,15 @@ export function NoteDashboard({
     setRecentNotes(prev => prev.filter(n => n.id !== noteId));
   }, []);
 
+  // アーカイブ時のハンドラ（アーカイブされたらリストから削除）
+  const handleNoteArchive = useCallback((noteId: string, isArchived: boolean) => {
+    if (isArchived) {
+      // アーカイブされた場合、リストから削除
+      setPinnedNotes(prev => prev.filter(n => n.id !== noteId));
+      setRecentNotes(prev => prev.filter(n => n.id !== noteId));
+    }
+  }, []);
+
   return (
     <>
       {/* ピン留めセクション */}
@@ -78,6 +87,7 @@ export function NoteDashboard({
             notes={pinnedNotes}
             onNoteUpdate={handleNoteUpdate}
             onNoteDelete={handleNoteDelete}
+            onNoteArchive={handleNoteArchive}
           />
         </section>
       )}
@@ -101,6 +111,7 @@ export function NoteDashboard({
             search={search}
             onNoteUpdate={handleNoteUpdate}
             onNoteDelete={handleNoteDelete}
+            onNoteArchive={handleNoteArchive}
           />
         )}
       </section>

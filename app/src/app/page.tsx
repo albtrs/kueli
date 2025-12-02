@@ -23,8 +23,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const selectedTag = params.tag;
   const searchQuery = params.q;
 
-  // ピン留めノートは全件取得後、フィルタを適用
-  const allNotes = await getNotes();
+  // ピン留めノートは全件取得後、フィルタを適用（アーカイブは除外）
+  const allNotes = await getNotes(false);
   let pinnedNotes = allNotes.filter((note) => note.isPinned);
   
   // タグフィルタを適用
@@ -45,8 +45,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     );
   }
   
-  // 最近のノートはページネーションで取得（初期20件）
-  const initialPage = await getNotesPage(null, 20, selectedTag, searchQuery);
+  // 最近のノートはページネーションで取得（初期20件、アーカイブ除外）
+  const initialPage = await getNotesPage(null, 20, selectedTag, searchQuery, false);
 
   return (
     <DashboardLayout>
