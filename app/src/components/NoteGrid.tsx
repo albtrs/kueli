@@ -442,6 +442,9 @@ function NoteCard({
         )}
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>{formatDateJST(note.updatedAt)}</span>
+          {note.tags && note.tags.length > 0 && (
+            <span className="truncate ml-2 text-[10px]">#{note.tags[0]}{note.tags.length > 1 && ` +${note.tags.length - 1}`}</span>
+          )}
         </div>
       </CardContent>
     </Card>

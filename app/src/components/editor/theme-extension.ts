@@ -4,8 +4,8 @@ import { EditorView } from "@codemirror/view";
 
 // --- 1. シンタックスハイライト（文字色・太さ） ---
 const markdownHighlighting = HighlightStyle.define([
-  // 見出し: 青系で太く
-  { tag: t.heading, fontWeight: "bold", color: "#3b82f6" }, 
+  // 見出し: 太字のみ、色は通常
+  { tag: t.heading, fontWeight: "bold" }, 
   
   // 太字: しっかり太く
   { tag: t.strong, fontWeight: "bold", color: "inherit" },
@@ -13,20 +13,17 @@ const markdownHighlighting = HighlightStyle.define([
   // 斜体
   { tag: t.emphasis, fontStyle: "italic" },
   
-  // ★修正: リストのマーカー (- や 1.)
-  // 薄いグレー(#9ca3af)をやめて、アクセントカラー(オレンジ系)に変更
-  { tag: t.list, color: "#d97706", fontWeight: "bold" }, 
+  // リストのマーカー (- や 1.): 通常色
+  { tag: t.list, color: "inherit" }, 
   
   // 引用 (>): 緑系
   { tag: t.quote, color: "#10b981", fontStyle: "italic" },
   
-  // ★修正: リンクのテキスト [text]
-  // 太字を追加してクリックできる感を強調
-  { tag: t.link, color: "#2563eb", textDecoration: "underline", fontWeight: "bold" },
+  // リンクのテキスト [text]: 通常色
+  { tag: t.link, color: "inherit" },
   
-  // ★修正: リンクのURL (url)
-  // 少しだけ濃くして、薄すぎないように調整
-  { tag: t.url, color: "#6b7280" },
+  // リンクのURL (url): 薄めのグレー
+  { tag: t.url, color: "#9ca3af" },
   
   // コードブロック (```)
   { tag: t.monospace, color: "#ef4444", backgroundColor: "#f3f4f6", borderRadius: "4px" },

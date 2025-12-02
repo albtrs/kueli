@@ -15,40 +15,6 @@ export const createTableTemplate = (rows: number = 3, cols: number = 3): string 
 };
 
 /**
- * TSV (Excel/Googleスプレッドシートからのコピー) を Markdownテーブルに変換
- * @param text ペーストされたテキスト
- */
-export const convertTsvToMd = (text: string): string | null => {
-  // タブがない場合はTSVではない（単なる複数行テキストを除外）
-  if (!text.includes("\t")) return null;
-  
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length === 0) return null;
-
-  // 各行をセルに分割
-  const rows = lines.map(line => line.split("\t"));
-  const colCount = Math.max(...rows.map(r => r.length));
-
-  // 1列しかない場合はテーブルとして扱わない
-  if (colCount < 2) return null;
-
-  // 列数が一定でない場合は埋める
-  const normalizedRows = rows.map(row => {
-    const padded = [...row, ...Array(colCount - row.length).fill("")];
-    return padded.map(cell => cell.trim());
-  });
-
-  // Markdown形式に組み立て
-  const buildRow = (cells: string[]) => `| ${cells.join(" | ")} |`;
-
-  const header = buildRow(normalizedRows[0]);
-  const separator = `| ${Array(colCount).fill("---").join(" | ")} |`;
-  const body = normalizedRows.slice(1).map(buildRow).join("\n");
-
-  return `${header}\n${separator}${body ? "\n" + body : ""}`;
-};
-
-/**
  * 文字列の表示幅を計算（全角文字を考慮）
  * 全角文字は2、半角文字は1としてカウント
  */

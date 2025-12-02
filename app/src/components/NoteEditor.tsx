@@ -4,10 +4,19 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import dynamic from 'next/dynamic';
-import { fetchNote, fetchNotes, saveNote as saveNoteAction, deleteNote } from '@/actions/note';
+import { fetchNote, fetchNotes, deleteNote } from '@/actions/note';
 import { Note } from '@/lib/types';
-import { extractTags, cn } from '@/lib/utils';
-import { createTableTemplate, convertTsvToMd, formatMarkdownTable, findTableRange } from '@/lib/table-utils';
+import { cn } from '@/lib/utils';
+import { generateDateTimeTitle } from '@/lib/datetime';
+import { createTableTemplate, formatMarkdownTable, findTableRange } from '@/lib/table-utils';
+import { useAutoSave, useFileUpload } from '@/hooks';
+import { 
+  getMarkdownExtension, 
+  getLineMovementKeymap,
+  createWikiLinkCompletion,
+  richMarkdownTheme,
+  customHighlighters,
+} from '@/components/editor';
 import { DashboardLayout } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,83 +30,6 @@ const CodeMirror = dynamic(
   () => import('@uiw/react-codemirror').then((mod) => mod.default),
   { ssr: false }
 );
-
-// Markdownエクステンションも動的インポート
-const getMarkdownExtension = async () => {
-  const { markdown } = await import('@codemirror/lang-markdown');
-  const { languages } = await import('@codemirror/language-data');
-  return markdown({ codeLanguages: languages });
-};
-
-// リッチMarkdownテーマを動的インポート
-const getRichMarkdownTheme = async () => {
-  const { richMarkdownTheme } = await import('@/components/editor/theme-extension');
-  return richMarkdownTheme;
-};
-
-// カスタムハイライター（タグ、Wikiリンク）を動的インポート
-const getCustomHighlighters = async () => {
-  const { customHighlighters } = await import('@/components/editor/extensions');
-  return customHighlighters;
-};
-
-// Wikiリンク用オートコンプリート
-const getWikiLinkCompletion = async (noteTitles: string[]) => {
-  const { autocompletion } = await import('@codemirror/autocomplete');
-  
-  return autocompletion({
-    activateOnTyping: true,
-    override: [
-      (context: any) => {
-        const line = context.state.doc.lineAt(context.pos);
-        const textBefore = line.text.slice(0, context.pos - line.from);
-        const textAfter = line.text.slice(context.pos - line.from);
-        
-        const match = textBefore.match(/\[\[([^\]]*)$/);
-        if (!match) return null;
-        
-        const query = match[1].toLowerCase();
-        const from = context.pos - match[1].length;
-        const hasClosingBrackets = textAfter.startsWith(']]');
-        
-        const options = noteTitles
-          .filter(t => t.toLowerCase().includes(query))
-          .map(title => ({
-            label: title,
-            apply: (view: any, completion: any, from: number, to: number) => {
-              const insertText = title + ']]';
-              const deleteTo = hasClosingBrackets ? to + 2 : to;
-              view.dispatch({
-                changes: { from, to: deleteTo, insert: insertText },
-                selection: { anchor: from + insertText.length },
-              });
-            },
-          }));
-        
-        if (options.length === 0) return null;
-        
-        return {
-          from,
-          options,
-        };
-      },
-    ],
-  });
-};
-
-// 日時ベースのタイトルを生成
-function generateDateTimeTitle(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const seconds = String(now.getSeconds()).padStart(2, '0');
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-}
-
-type SaveStatus = 'new' | 'saved' | 'saving' | 'unsaved';
 
 interface NoteEditorProps {
   /** 既存ノートのID。nullの場合は新規作成モード */
@@ -116,24 +48,41 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
   const [note, setNote] = useState<Note | null>(null);
   const [title, setTitle] = useState(initialTitle || (isNewMode ? generateDateTimeTitle() : ''));
   const [content, setContent] = useState('');
-  const [createdNoteId, setCreatedNoteId] = useState<string | null>(null);
   
   // UI状態
   const [isLoading, setIsLoading] = useState(true);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>(isNewMode ? 'new' : 'saved');
   const [extensions, setExtensions] = useState<any[]>([]);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  // 新規作成時は編集モード、編集時はプレビューモードをデフォルトに
   const [activeTab, setActiveTab] = useState<'write' | 'preview'>(isNewMode ? 'write' : 'preview');
-  const [editorReady, setEditorReady] = useState(false);
   const [allNotes, setAllNotes] = useState<Note[]>([]);
 
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
 
-  // 現在のノートID（新規作成後は createdNoteId を使用）
-  const currentNoteId = createdNoteId || noteId;
+  // 自動保存フック
+  const {
+    saveStatus,
+    createdNoteId,
+    currentNoteId,
+    scheduleSave,
+    saveNow,
+  } = useAutoSave({
+    noteId,
+    isNewMode,
+    note,
+    onNoteUpdate: setNote,
+  });
+
+  // ファイルアップロードフック
+  const {
+    isUploading,
+    isDragOver,
+    uploadFiles,
+    handleDragOver,
+    handleDragLeave,
+    createDropHandler,
+  } = useFileUpload({
+    note,
+    onNoteUpdate: setNote,
+  });
 
   // タイトル → ID のマッピング辞書（Wikiリンク用）
   const permalinks = useMemo(() => {
@@ -151,32 +100,41 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
     return allNotes.map(n => n.title).filter(Boolean);
   }, [allNotes]);
 
+  // エディタにテキストを挿入
+  const insertTextAtCursor = useCallback((text: string) => {
+    const view = editorRef.current?.view;
+    if (view) {
+      const pos = view.state.selection.main.head;
+      view.dispatch({
+        changes: { from: pos, to: pos, insert: text },
+        selection: { anchor: pos + text.length },
+      });
+      const newContent = view.state.doc.toString();
+      setContent(newContent);
+      scheduleSave(title, newContent);
+      view.focus();
+    } else {
+      const newContent = content + text;
+      setContent(newContent);
+      scheduleSave(title, newContent);
+    }
+  }, [content, title, scheduleSave]);
+
   // Markdownエクステンションを読み込み
   useEffect(() => {
     const loadExtensions = async () => {
-      const { EditorView, keymap } = await import('@codemirror/view');
-      const { moveLineUp, moveLineDown } = await import('@codemirror/commands');
+      const { EditorView } = await import('@codemirror/view');
       const markdownExt = await getMarkdownExtension();
-      const wikiLinkExt = await getWikiLinkCompletion(noteTitles);
-      const richTheme = await getRichMarkdownTheme();
-      const customExt = await getCustomHighlighters();
-      
-      // 行移動のキーバインド
-      const lineMovementKeymap = keymap.of([
-        { key: "Ctrl-ArrowUp", run: moveLineUp, preventDefault: true },
-        { key: "Ctrl-ArrowDown", run: moveLineDown, preventDefault: true },
-        // Alt版も追加（VSCode準拠、Macでも使いやすい）
-        { key: "Alt-ArrowUp", run: moveLineUp, preventDefault: true },
-        { key: "Alt-ArrowDown", run: moveLineDown, preventDefault: true },
-      ]);
+      const wikiLinkExt = await createWikiLinkCompletion(noteTitles);
+      const lineMovementKeymap = await getLineMovementKeymap();
       
       setExtensions([
         markdownExt, 
         wikiLinkExt, 
         EditorView.lineWrapping, 
-        ...richTheme,
-        ...customExt,  // タグとWikiリンクのハイライト
-        lineMovementKeymap,  // 行移動ショートカット
+        ...richMarkdownTheme,
+        ...customHighlighters,
+        lineMovementKeymap,
       ]);
     };
     loadExtensions();
@@ -198,22 +156,18 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
     const loadData = async () => {
       try {
         if (isNewMode) {
-          // 新規作成モード: 全ノートのみ取得
           const notes = await fetchNotes();
           if (isMounted) {
             setAllNotes(notes);
           }
         } else {
-          // 編集モード: ノートと全ノートを並列取得
           const [record, notes] = await Promise.all([
             fetchNote(noteId!),
             fetchNotes()
           ]);
           
           if (!record) {
-            if (isMounted) {
-              router.push('/');
-            }
+            if (isMounted) router.push('/');
             return;
           }
           
@@ -222,8 +176,6 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
             setTitle(record.title);
             setContent(record.content || '');
             setAllNotes(notes);
-            // 編集モードでは常に編集タブをデフォルトに
-            // （プレビューを見たい場合はユーザーが手動で切り替える）
           }
         }
       } catch (err) {
@@ -245,203 +197,20 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
     };
   }, [noteId, isNewMode, router, status]);
 
-  // 保存処理
-  const performSave = useCallback(
-    async (newTitle: string, newContent: string) => {
-      // 新規作成モードで空のコンテンツの場合は保存しない
-      if (isNewMode && !newContent.trim() && !createdNoteId) {
-        return;
-      }
-
-      // 編集モードでノートがまだ読み込まれていない場合はスキップ
-      if (!isNewMode && !note) return;
-
-      setSaveStatus('saving');
-      try {
-        const tags = extractTags(newContent);
-        
-        const saved = await saveNoteAction(currentNoteId, {
-          title: newTitle,
-          content: newContent,
-          tags,
-        });
-        
-        // 新規作成の初回保存時
-        if (isNewMode && !createdNoteId) {
-          setCreatedNoteId(saved.id);
-          setNote(saved);
-          // URLを置き換え（戻るボタンで/notes/newに戻らないように）
-          window.history.replaceState(null, '', `/notes/${saved.id}`);
-        } else {
-          setNote(saved);
-        }
-        
-        setSaveStatus('saved');
-      } catch (err) {
-        console.error('Failed to save note:', err);
-        setSaveStatus('unsaved');
-      }
-    },
-    [isNewMode, note, currentNoteId, createdNoteId]
-  );
-
   // タイトル変更ハンドラ
-  const handleTitleChange = (newTitle: string) => {
+  const handleTitleChange = useCallback((newTitle: string) => {
     setTitle(newTitle);
-    
-    // 保存が必要かどうかを判定
-    const needsSave = !isNewMode || createdNoteId || content.trim();
-    if (needsSave) {
-      setSaveStatus('unsaved');
-    }
-
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    saveTimeoutRef.current = setTimeout(() => {
-      performSave(newTitle, content);
-    }, 1000);
-  };
+    scheduleSave(newTitle, content);
+  }, [content, scheduleSave]);
 
   // コンテンツ変更ハンドラ
-  const handleContentChange = (newContent: string) => {
+  const handleContentChange = useCallback((newContent: string) => {
     setContent(newContent);
-    
-    const needsSave = !isNewMode || createdNoteId || newContent.trim();
-    if (needsSave) {
-      setSaveStatus('unsaved');
-    }
+    scheduleSave(title, newContent);
+  }, [title, scheduleSave]);
 
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    saveTimeoutRef.current = setTimeout(() => {
-      performSave(title, newContent);
-    }, 1000);
-  };
-
-  // ファイルアップロード
-  const uploadFile = async (file: File): Promise<{ url: string | null; error?: string }> => {
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        return { 
-          url: null, 
-          error: errorData.error || 'アップロードに失敗しました' 
-        };
-      }
-
-      const data = await response.json();
-      
-      // 既存ノートの場合はimagesを更新
-      if (note) {
-        const updatedImages = [...(note.images || []), data.filename];
-        const updated = await saveNoteAction(note.id, {
-          ...note,
-          images: updatedImages,
-        });
-        setNote(updated);
-      }
-
-      return { url: data.url };
-    } catch (err) {
-      console.error('Failed to upload file:', err);
-      return { 
-        url: null, 
-        error: err instanceof Error ? err.message : 'アップロードに失敗しました' 
-      };
-    }
-  };
-
-  // ドラッグ&ドロップハンドラ
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-
-    const files = Array.from(e.dataTransfer.files);
-    await handleFilesUpload(files);
-  };
-
-  // ファイルアップロード共通処理（D&D、ボタン両方で使用）
-  const handleFilesUpload = async (files: File[]) => {
-    if (files.length === 0) return;
-    
-    try {
-      setIsUploading(true);
-      
-      const uploadPromises = files.map(file => uploadFile(file));
-      const results = await Promise.all(uploadPromises);
-      
-      const errors: string[] = [];
-      let insertText = '';
-      
-      files.forEach((file, index) => {
-        const result = results[index];
-        if (result.url) {
-          // 改行なしで追加（複数ファイルの場合はスペースで区切る）
-          if (insertText) insertText += ' ';
-          insertText += `![${file.name}](${result.url})`;
-        } else if (result.error) {
-          errors.push(`${file.name}: ${result.error}`);
-        }
-      });
-      
-      if (errors.length > 0) {
-        alert('以下のファイルのアップロードに失敗しました:\n\n' + errors.join('\n'));
-      }
-      
-      if (insertText) {
-        // カーソル位置に挿入
-        const view = editorRef.current?.view;
-        if (view) {
-          const pos = view.state.selection.main.head;
-          view.dispatch({
-            changes: { from: pos, to: pos, insert: insertText },
-            selection: { anchor: pos + insertText.length },
-          });
-          // コンテンツを更新（自動保存をトリガー）
-          const newContent = view.state.doc.toString();
-          handleContentChange(newContent);
-          // フォーカスを復帰
-          view.focus();
-        } else {
-          // フォールバック: 末尾に追加
-          const newContent = content + insertText;
-          setContent(newContent);
-          handleContentChange(newContent);
-        }
-      }
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  // ツールバーからのファイル選択ハンドラ
-  const handleFileSelect = (fileList: FileList) => {
-    const files = Array.from(fileList);
-    handleFilesUpload(files);
-  };
-
-  // 削除ハンドラ（編集モードのみ）
-  const handleDelete = async () => {
+  // 削除ハンドラ
+  const handleDelete = useCallback(async () => {
     const targetId = currentNoteId;
     if (!targetId || !confirm('このメモを削除しますか？')) return;
 
@@ -452,15 +221,15 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
       console.error('Failed to delete note:', err);
       alert('削除に失敗しました');
     }
-  };
+  }, [currentNoteId, router]);
 
   // 手動保存
-  const handleManualSave = async () => {
-    await performSave(title, content);
-  };
+  const handleManualSave = useCallback(async () => {
+    await saveNow(title, content);
+  }, [title, content, saveNow]);
 
-  // テーブル機能
-  const handleInsertTable = () => {
+  // テーブル挿入
+  const handleInsertTable = useCallback(() => {
     const tableMd = createTableTemplate(3, 3);
     const view = editorRef.current?.view;
     if (view) {
@@ -470,9 +239,10 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
       });
       view.focus();
     }
-  };
+  }, []);
 
-  const handleFormatTable = () => {
+  // テーブル整形
+  const handleFormatTable = useCallback(() => {
     const view = editorRef.current?.view;
     if (!view) return;
 
@@ -496,40 +266,22 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
       }
     }
     view.focus();
-  };
+  }, [content]);
 
-  // TSVペースト処理
-  const handlePaste = useCallback((event: ClipboardEvent) => {
-    const text = event.clipboardData?.getData('text/plain');
-    if (!text) return;
-
-    const table = convertTsvToMd(text);
-    if (table) {
-      event.preventDefault();
-      const view = editorRef.current?.view;
-      if (view) {
-        const range = view.state.selection.main;
-        view.dispatch({
-          changes: { from: range.from, to: range.to, insert: table }
-        });
-      }
+  // ファイル選択ハンドラ
+  const handleFileSelect = useCallback(async (fileList: FileList) => {
+    const files = Array.from(fileList);
+    const insertText = await uploadFiles(files);
+    if (insertText) {
+      insertTextAtCursor(insertText);
     }
-  }, []);
+  }, [uploadFiles, insertTextAtCursor]);
 
-  // ペーストイベントリスナーの登録
-  useEffect(() => {
-    if (!editorReady) return;
-    
-    const view = editorRef.current?.view;
-    if (!view) return;
-
-    const dom = view.dom;
-    dom.addEventListener('paste', handlePaste);
-
-    return () => {
-      dom.removeEventListener('paste', handlePaste);
-    };
-  }, [handlePaste, editorReady]);
+  // ドロップハンドラ
+  const handleDrop = useMemo(
+    () => createDropHandler(insertTextAtCursor),
+    [createDropHandler, insertTextAtCursor]
+  );
 
   // ローディング中
   if (isLoading || status === 'loading') {
@@ -542,9 +294,7 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
     );
   }
 
-  // 削除ボタンを表示するかどうか
   const showDeleteButton = !isNewMode || createdNoteId;
-  // 保存ボタンを無効にするかどうか
   const isSaveDisabled = isNewMode && !createdNoteId && !content.trim();
 
   return (
@@ -611,7 +361,7 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
                 <span className="hidden sm:inline">保存</span>
               </Button>
               
-              {/* 削除ボタン（新規作成の未保存時は非表示） */}
+              {/* 削除ボタン */}
               {showDeleteButton && (
                 <Button 
                   variant="ghost" 
@@ -634,14 +384,13 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
             className="mb-3 text-xl md:text-2xl font-bold border-none focus-visible:ring-0 px-0"
           />
 
-          {/* コンテンツエリア: エディタは常にレンダリングし、CSSで表示/非表示を切り替え */}
+          {/* コンテンツエリア */}
           <div className="flex-1 min-h-0 relative">
-            {/* 編集タブ: 常にレンダリング、プレビュー時はhidden */}
+            {/* 編集タブ */}
             <div className={cn(
               "h-full flex flex-col",
               activeTab !== 'write' && "hidden"
             )}>
-              {/* ツールバー */}
               <EditorToolbar 
                 onInsertTable={handleInsertTable}
                 onFormatTable={handleFormatTable}
@@ -679,7 +428,6 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
                   height="100%"
                   extensions={extensions}
                   onChange={handleContentChange}
-                  onCreateEditor={() => setEditorReady(true)}
                   placeholder="Markdownで入力..."
                   className="h-full overflow-hidden [&_.cm-editor]:h-full [&_.cm-editor]:outline-none [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:h-full [&_.cm-scroller]:overflow-y-auto [&_.cm-scroller]:overflow-x-hidden"
                   basicSetup={{
