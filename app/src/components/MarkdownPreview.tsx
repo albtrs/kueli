@@ -14,13 +14,118 @@ interface MarkdownPreviewProps {
 
 /**
  * Markdownプレビューコンポーネント
+ * Tailwind CSSでミニマルなスタイルを適用
  */
 export function MarkdownPreview({ content, permalinks }: MarkdownPreviewProps) {
   // カスタムMarkdownレンダラー
   const markdownComponents: any = useMemo(() => ({
+    // --- 見出し ---
+    h1: ({ children }: any) => (
+      <h1 className="text-2xl font-bold mt-6 mb-3 pb-2 border-b border-border">
+        {children}
+      </h1>
+    ),
+    h2: ({ children }: any) => (
+      <h2 className="text-xl font-semibold mt-5 mb-2 pb-1 border-b border-border/50">
+        {children}
+      </h2>
+    ),
+    h3: ({ children }: any) => (
+      <h3 className="text-lg font-medium mt-4 mb-2">{children}</h3>
+    ),
+    h4: ({ children }: any) => (
+      <h4 className="text-base font-medium mt-3 mb-1">{children}</h4>
+    ),
+    h5: ({ children }: any) => (
+      <h5 className="text-sm font-medium mt-2 mb-1">{children}</h5>
+    ),
+    h6: ({ children }: any) => (
+      <h6 className="text-sm font-medium mt-2 mb-1 text-muted-foreground">{children}</h6>
+    ),
+
+    // --- 本文 ---
+    p: ({ children }: any) => (
+      <p className="leading-7 mb-3">{children}</p>
+    ),
+
+    // --- リスト ---
+    ul: ({ children }: any) => (
+      <ul className="list-disc list-outside ml-6 mb-3 space-y-1">{children}</ul>
+    ),
+    ol: ({ children }: any) => (
+      <ol className="list-decimal list-outside ml-6 mb-3 space-y-1">{children}</ol>
+    ),
+    li: ({ children }: any) => (
+      <li className="leading-7">{children}</li>
+    ),
+
+    // --- 引用 ---
+    blockquote: ({ children }: any) => (
+      <blockquote className="border-l-4 border-muted-foreground/30 pl-4 py-1 my-3 text-muted-foreground italic">
+        {children}
+      </blockquote>
+    ),
+
+    // --- コード ---
+    code: ({ className, children, ...props }: any) => {
+      const match = /language-(\w+)/.exec(className || '');
+      const isInline = !match;
+      
+      if (isInline) {
+        return (
+          <code className="bg-muted text-primary rounded px-1.5 py-0.5 text-sm font-mono">
+            {children}
+          </code>
+        );
+      }
+      // コードブロック
+      return (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      );
+    },
+    pre: ({ children }: any) => (
+      <pre className="bg-muted rounded-md p-4 my-3 overflow-x-auto text-sm font-mono">
+        {children}
+      </pre>
+    ),
+
+    // --- テーブル ---
+    table: ({ children }: any) => (
+      <div className="overflow-x-auto my-3 border border-border rounded-md">
+        <table className="w-full text-sm text-left">{children}</table>
+      </div>
+    ),
+    thead: ({ children }: any) => (
+      <thead className="bg-muted text-foreground font-medium border-b border-border">
+        {children}
+      </thead>
+    ),
+    tbody: ({ children }: any) => (
+      <tbody className="divide-y divide-border">{children}</tbody>
+    ),
+    tr: ({ children }: any) => (
+      <tr className="hover:bg-muted/50 transition-colors">{children}</tr>
+    ),
+    th: ({ children }: any) => (
+      <th className="px-4 py-2 font-semibold">{children}</th>
+    ),
+    td: ({ children }: any) => (
+      <td className="px-4 py-2 align-top">{children}</td>
+    ),
+
+    // --- 水平線 ---
+    hr: () => (
+      <hr className="my-6 border-border" />
+    ),
+
+    // --- 画像 ---
     img: ({ node, ...props }: any) => (
       <MediaRenderer src={props.src} alt={props.alt} />
     ),
+
+    // --- リンク ---
     a: ({ node, href, children, className, ...props }: any) => {
       // Wikiリンクの場合（remark-wiki-linkが付与するクラス）
       const isWikiLink = className?.includes('internal');
@@ -30,7 +135,10 @@ export function MarkdownPreview({ content, permalinks }: MarkdownPreviewProps) {
         return (
           <a
             href={href}
-            className={isNewWikiLink ? 'wiki-link-new' : 'wiki-link'}
+            className={isNewWikiLink 
+              ? 'text-orange-500 hover:text-orange-600 hover:underline cursor-pointer' 
+              : 'text-blue-500 hover:text-blue-600 hover:underline cursor-pointer'
+            }
             {...props}
           >
             {children}
@@ -47,6 +155,7 @@ export function MarkdownPreview({ content, permalinks }: MarkdownPreviewProps) {
             href={href}
             target={isExternal ? '_blank' : undefined}
             rel={isExternal ? 'noopener noreferrer' : undefined}
+            className="text-blue-500 hover:text-blue-600 hover:underline cursor-pointer"
             {...props}
           >
             {children}
@@ -55,7 +164,23 @@ export function MarkdownPreview({ content, permalinks }: MarkdownPreviewProps) {
         </>
       );
     },
-  }), []);
+
+    // --- チェックボックス（GFM） ---
+    input: ({ type, checked, ...props }: any) => {
+      if (type === 'checkbox') {
+        return (
+          <input
+            type="checkbox"
+            checked={checked}
+            disabled
+            className="mr-2 rounded border-border"
+            {...props}
+          />
+        );
+      }
+      return <input type={type} {...props} />;
+    },
+  }), [permalinks]);
 
   // remarkWikiLink の設定
   const wikiLinkOptions = useMemo(() => ({

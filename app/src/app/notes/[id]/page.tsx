@@ -9,12 +9,13 @@ import { saveNote as saveNoteAction, deleteNote } from '@/actions/note';
 import { Note } from '@/lib/types';
 import { extractTags } from '@/lib/utils';
 import { createTableTemplate, convertTsvToMd, formatMarkdownTable, findTableRange } from '@/lib/table-utils';
+import { DashboardLayout } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EditorToolbar } from '@/components/EditorToolbar';
 import { MarkdownPreview } from '@/components/MarkdownPreview';
-import { ArrowLeft, Loader2, Check, Upload } from 'lucide-react';
+import { Loader2, Check, Upload, Save, Trash2 } from 'lucide-react';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 
 // CodeMirrorは動的インポート（SSR無効化）
@@ -28,6 +29,48 @@ const getMarkdownExtension = async () => {
   const { markdown } = await import('@codemirror/lang-markdown');
   const { languages } = await import('@codemirror/language-data');
   return markdown({ codeLanguages: languages });
+};
+
+// テーマを動的インポート
+const getEditorTheme = async () => {
+  const { githubLight } = await import('@uiw/codemirror-theme-github');
+  return githubLight;
+};
+
+// カスタムスタイルを動的インポート
+const getCustomStyles = async () => {
+  const { EditorView } = await import('@codemirror/view');
+  return EditorView.theme({
+    '&': {
+      fontSize: '15px',
+    },
+    '.cm-content': {
+      padding: '12px 16px',
+      lineHeight: '1.6',
+    },
+    '.cm-activeLine': {
+      backgroundColor: '#f0f8ff',
+    },
+    // 見出しを大きく、太くする
+    '.cm-header': {
+      fontWeight: 'bold',
+      color: '#0550ae',
+    },
+    '.cm-header-1': { fontSize: '1.4em' },
+    '.cm-header-2': { fontSize: '1.25em' },
+    '.cm-header-3': { fontSize: '1.1em' },
+    // リンク
+    '.cm-link': {
+      color: '#0969da',
+    },
+    // 強調
+    '.cm-strong': {
+      fontWeight: 'bold',
+    },
+    '.cm-emphasis': {
+      fontStyle: 'italic',
+    },
+  });
 };
 
 // Wikiリンク用オートコンプリート
@@ -123,9 +166,12 @@ export default function EditorPage() {
   // Markdownエクステンションを読み込み（ノートタイトルが更新されたら再読み込み）
   useEffect(() => {
     const loadExtensions = async () => {
+      const { EditorView } = await import('@codemirror/view');
       const markdownExt = await getMarkdownExtension();
       const wikiLinkExt = await getWikiLinkCompletion(noteTitles);
-      setExtensions([markdownExt, wikiLinkExt]);
+      const theme = await getEditorTheme();
+      const customStyles = await getCustomStyles();
+      setExtensions([markdownExt, wikiLinkExt, EditorView.lineWrapping, theme, customStyles]);
     };
     loadExtensions();
   }, [noteTitles]);
@@ -422,123 +468,132 @@ export default function EditorPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
+      <DashboardLayout hideSidebar>
+        <div className="flex h-full items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      {/* サイドバーは別途インポート可能だが、ここでは省略してメインエリアのみ */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="max-w-5xl mx-auto flex h-14 items-center gap-2 px-4 md:px-6">
-            <Button variant="ghost" size="icon" onClick={() => router.push('/')}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground ml-auto">
-              {saveStatus === 'saving' && (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="hidden sm:inline">保存中...</span>
-                </>
-              )}
-              {saveStatus === 'saved' && (
-                <>
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span className="hidden sm:inline">保存済み</span>
-                </>
-              )}
-              {saveStatus === 'unsaved' && <span className="hidden sm:inline">未保存</span>}
-              <Button variant="outline" size="sm" onClick={handleManualSave}>
-                保存
-              </Button>
-              <Button variant="destructive" size="sm" onClick={handleDelete} className="text-white">
-                削除
-              </Button>
+    <DashboardLayout hideSidebar>
+      <div className="flex flex-col h-full overflow-hidden px-4 pb-4 md:px-6">
+        <div className="max-w-5xl mx-auto w-full h-full flex flex-col">
+          <Tabs defaultValue={defaultTab} key={defaultTab} className="h-full flex flex-col">
+            {/* タブ + アクションボタン */}
+            <div className="flex items-center justify-between py-3 gap-2">
+              <TabsList>
+                <TabsTrigger value="write">編集</TabsTrigger>
+                <TabsTrigger value="preview">プレビュー</TabsTrigger>
+              </TabsList>
+              
+              {/* 保存状態とアクションボタン */}
+              <div className="flex items-center gap-2">
+                {/* 保存状態インジケータ */}
+                <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                  {saveStatus === 'saving' && (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="hidden sm:inline">保存中...</span>
+                    </>
+                  )}
+                  {saveStatus === 'saved' && (
+                    <>
+                      <Check className="h-4 w-4 text-green-500" />
+                      <span className="hidden sm:inline">保存済み</span>
+                    </>
+                  )}
+                  {saveStatus === 'unsaved' && <span className="hidden sm:inline">未保存</span>}
+                </div>
+                
+                {/* 保存ボタン */}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleManualSave} 
+                  className="h-8 gap-1"
+                >
+                  <Save className="h-4 w-4" />
+                  <span className="hidden sm:inline">保存</span>
+                </Button>
+                
+                {/* 削除ボタン */}
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={handleDelete} 
+                  className="h-8 gap-1 text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">削除</span>
+                </Button>
+              </div>
             </div>
-          </div>
-        </header>
-
-        {/* Editor */}
-        <main className="flex-1 overflow-hidden px-4 pb-4 md:px-6">
-        <div className="max-w-5xl mx-auto h-full">
-        <Tabs defaultValue={defaultTab} key={defaultTab} className="h-full flex flex-col">
-          <div className="flex items-center justify-between mb-3">
-            <TabsList>
-              <TabsTrigger value="write">編集</TabsTrigger>
-              <TabsTrigger value="preview">プレビュー</TabsTrigger>
-            </TabsList>
-          </div>
-          
-          {/* タイトル入力欄をエディタの上に配置 */}
-          <Input
-            value={title}
-            onChange={(e) => handleTitleChange(e.target.value)}
-            placeholder="タイトル"
-            className="mb-3 text-xl md:text-2xl font-bold border-none focus-visible:ring-0 px-0"
-          />
-
-          <TabsContent value="write" className="flex-1 min-h-0 flex flex-col">
-            {/* ツールバー */}
-            <EditorToolbar 
-              onInsertTable={handleInsertTable}
-              onFormatTable={handleFormatTable}
+            
+            {/* タイトル入力欄 */}
+            <Input
+              value={title}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              placeholder="タイトル"
+              className="mb-3 text-xl md:text-2xl font-bold border-none focus-visible:ring-0 px-0"
             />
 
-            <div
-              className={`relative flex-1 min-h-0 rounded-sm border transition-colors overflow-hidden ${
-                isDragOver ? 'border-primary border-2 bg-primary/5' : 'border-input'
-              }`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-            >
-              {isDragOver && (
-                <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 rounded">
-                  <div className="flex flex-col items-center gap-2 text-primary">
-                    <Upload className="h-8 w-8" />
-                    <span>ファイルをドロップ</span>
-                  </div>
-                </div>
-              )}
-              {isUploading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 rounded">
-                  <div className="flex flex-col items-center gap-2 text-primary">
-                    <Loader2 className="h-8 w-8 animate-spin" />
-                    <span>アップロード中...</span>
-                  </div>
-                </div>
-              )}
-              <CodeMirror
-                ref={editorRef}
-                value={content}
-                height="100%"
-                extensions={extensions}
-                onChange={handleContentChange}
-                onCreateEditor={() => setEditorReady(true)}
-                placeholder="Markdownで入力..."
-                className="h-full overflow-hidden [&_.cm-editor]:h-full [&_.cm-editor]:outline-none [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:h-full [&_.cm-scroller]:overflow-y-auto [&_.cm-scroller]:overflow-x-hidden [&_.cm-content]:py-2 [&_.cm-content]:px-3"
-                basicSetup={{
-                  lineNumbers: false,
-                  foldGutter: false,
-                  highlightActiveLine: false,
-                }}
+            <TabsContent value="write" className="flex-1 min-h-0 flex flex-col">
+              {/* ツールバー */}
+              <EditorToolbar 
+                onInsertTable={handleInsertTable}
+                onFormatTable={handleFormatTable}
               />
-            </div>
-          </TabsContent>
 
-          <TabsContent value="preview" className="flex-1 min-h-0 overflow-auto">
-            <div className="prose prose-base dark:prose-invert max-w-none rounded border border-input p-4" style={{ fontFamily: 'var(--font-noto-sans-jp), sans-serif' }}>
+              <div
+                className={`relative flex-1 min-h-0 rounded-sm border transition-colors overflow-hidden ${
+                  isDragOver ? 'border-primary border-2 bg-primary/5' : 'border-input'
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                {isDragOver && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 rounded">
+                    <div className="flex flex-col items-center gap-2 text-primary">
+                      <Upload className="h-8 w-8" />
+                      <span>ファイルをドロップ</span>
+                    </div>
+                  </div>
+                )}
+                {isUploading && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 rounded">
+                    <div className="flex flex-col items-center gap-2 text-primary">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                      <span>アップロード中...</span>
+                    </div>
+                  </div>
+                )}
+                <CodeMirror
+                  ref={editorRef}
+                  value={content}
+                  height="100%"
+                  extensions={extensions}
+                  onChange={handleContentChange}
+                  onCreateEditor={() => setEditorReady(true)}
+                  placeholder="Markdownで入力..."
+                  className="h-full overflow-hidden [&_.cm-editor]:h-full [&_.cm-editor]:outline-none [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:h-full [&_.cm-scroller]:overflow-y-auto [&_.cm-scroller]:overflow-x-hidden"
+                  basicSetup={{
+                    lineNumbers: false,
+                    foldGutter: false,
+                    highlightActiveLine: true,
+                  }}
+                />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="preview" className="flex-1 min-h-0 overflow-auto">
               <MarkdownPreview content={content} permalinks={permalinks} />
-            </div>
-          </TabsContent>
-        </Tabs>
+            </TabsContent>
+          </Tabs>
         </div>
-      </main>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

@@ -55,8 +55,13 @@ export const getNotesPage = cache(async (
   const where: any = {}
   
   if (tag) {
-    // SQLite の JSON には LIKE で対応
-    where.tags = { contains: `"${tag}"` }
+    if (tag === '__untagged__') {
+      // タグなしのノート: tags が空配列 "[]" のもの
+      where.tags = { equals: '[]' }
+    } else {
+      // SQLite の JSON には LIKE で対応
+      where.tags = { contains: `"${tag}"` }
+    }
   }
   
   if (search) {

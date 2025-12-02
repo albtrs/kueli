@@ -55,7 +55,12 @@ export async function fetchNotesPage(
     const where: any = {}
     
     if (tag) {
-      where.tags = { contains: `"${tag}"` }
+      if (tag === '__untagged__') {
+        // タグなしのノート: tags が空配列 "[]" のもの
+        where.tags = { equals: '[]' }
+      } else {
+        where.tags = { contains: `"${tag}"` }
+      }
     }
     
     if (search) {
