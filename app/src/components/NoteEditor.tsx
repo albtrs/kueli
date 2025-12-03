@@ -21,6 +21,7 @@ import { DashboardLayout } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { EditorToolbar } from '@/components/EditorToolbar';
+import { PreviewToolbar } from '@/components/PreviewToolbar';
 import { MarkdownPreview } from '@/components/MarkdownPreview';
 import { VersionHistory } from '@/components/VersionHistory';
 import { Loader2, Check, Upload, Save, Trash2, History } from 'lucide-react';
@@ -56,6 +57,7 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
   const [activeTab, setActiveTab] = useState<'write' | 'preview'>(isNewMode ? 'write' : 'preview');
   const [allNotes, setAllNotes] = useState<Note[]>([]);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  const [isFullSizeImages, setIsFullSizeImages] = useState(false);
 
   const editorRef = useRef<ReactCodeMirrorRef>(null);
 
@@ -485,8 +487,18 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
 
               {/* プレビュータブ */}
               {activeTab === 'preview' && (
-                <div className="h-full overflow-auto">
-                  <MarkdownPreview content={content} permalinks={permalinks} />
+                <div className="h-full flex flex-col">
+                  <PreviewToolbar 
+                    isFullSizeImages={isFullSizeImages}
+                    onToggleImageSize={() => setIsFullSizeImages(!isFullSizeImages)}
+                  />
+                  <div className="flex-1 overflow-auto">
+                    <MarkdownPreview 
+                      content={content} 
+                      permalinks={permalinks} 
+                      isFullSizeImages={isFullSizeImages}
+                    />
+                  </div>
                 </div>
               )}
             </div>

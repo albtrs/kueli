@@ -451,3 +451,38 @@ export async function deleteNoteVersion(versionId: string): Promise<void> {
     throw error
   }
 }
+
+/**
+ * ノートを複製する（新規ノートとして作成、履歴は含まない）
+ */
+export async function duplicateNote(id: string): Promise<Note> {
+  try {
+    const session = await auth()
+    if (!session?.user) {
+      throw new UnauthorizedError()
+    }
+
+    const originalNote = await prisma.note.findUnique({ where: { id } })
+    if (!originalNote) {
+      throw new NotFoundError('Note not found')
+    }
+
+    // 新しいノートを作成（ピン留めとアーカイブ状態はリセット）
+    const duplicatedNote = await prisma.note.create({
+      data: {
+        title: `${originalNote.title}_Copy`,
+        content: originalNote.content,
+        isPinned: false,
+        isArchived: false,
+        tags: originalNote.tags,
+        images: originalNote.images,
+      }
+    })
+
+    revalidatePath('/')
+    return parseNote(duplicatedNote)
+  } catch (error) {
+    console.error('duplicateNote error:', handleServerActionError(error))
+    throw error
+  }
+}

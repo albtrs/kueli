@@ -1,15 +1,19 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import remarkWikiLink from 'remark-wiki-link';
 import { MediaRenderer } from './MediaRenderer';
 import { LinkPreview } from './LinkPreview';
+import { ImageGalleryModal, GalleryImage } from './ui/image-gallery-modal';
 
 interface MarkdownPreviewProps {
   content: string;
   permalinks: Record<string, string>;
+  /** 画像を原寸大で表示するか */
+  isFullSizeImages?: boolean;
 }
 
 // #タグをリンク+ハイライトに変換する関数
@@ -50,8 +54,40 @@ function processHashtags(children: React.ReactNode): React.ReactNode {
 /**
  * Markdownプレビューコンポーネント
  * Tailwind CSSでミニマルなスタイルを適用
+ * - remark-breaks: 改行を<br>に変換
  */
-export function MarkdownPreview({ content, permalinks }: MarkdownPreviewProps) {
+export function MarkdownPreview({ content, permalinks, isFullSizeImages = false }: MarkdownPreviewProps) {
+  // 画像ギャラリー用の状態
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+
+  // コンテンツから画像を抽出
+  const images = useMemo((): GalleryImage[] => {
+    const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+    const result: GalleryImage[] = [];
+    let match;
+    
+    while ((match = imageRegex.exec(content)) !== null) {
+      const alt = match[1];
+      const src = match[2];
+      
+      // /api/files/ がない場合は補完
+      const fullSrc = src.startsWith('/api/files/') || src.startsWith('http') 
+        ? src 
+        : `/api/files/${src}`;
+      
+      result.push({ src: fullSrc, alt });
+    }
+    
+    return result;
+  }, [content]);
+
+  // 画像クリックハンドラ
+  const handleImageClick = useCallback((index: number) => {
+    setGalleryIndex(index);
+    setGalleryOpen(true);
+  }, []);
+
   // カスタムMarkdownレンダラー
   const markdownComponents: any = useMemo(() => ({
     // --- 見出し ---
@@ -156,9 +192,24 @@ export function MarkdownPreview({ content, permalinks }: MarkdownPreviewProps) {
     ),
 
     // --- 画像 ---
-    img: ({ node, ...props }: any) => (
-      <MediaRenderer src={props.src} alt={props.alt} />
-    ),
+    img: ({ node, ...props }: any) => {
+      // 画像のインデックスを取得（imagesの中から該当するものを検索）
+      const src = props.src;
+      const fullSrc = src?.startsWith('/api/files/') || src?.startsWith('http') 
+        ? src 
+        : `/api/files/${src}`;
+      const index = images.findIndex(img => img.src === fullSrc);
+      
+      return (
+        <MediaRenderer 
+          src={props.src} 
+          alt={props.alt}
+          imageIndex={index !== -1 ? index : undefined}
+          onImageClick={index !== -1 ? handleImageClick : undefined}
+          isFullSize={isFullSizeImages}
+        />
+      );
+    },
 
     // --- リンク ---
     a: ({ node, href, children, className, ...props }: any) => {
@@ -215,7 +266,7 @@ export function MarkdownPreview({ content, permalinks }: MarkdownPreviewProps) {
       }
       return <input type={type} {...props} />;
     },
-  }), [permalinks]);
+  }), [permalinks, images, handleImageClick, isFullSizeImages]);
 
   // remarkWikiLink の設定
   const wikiLinkOptions = useMemo(() => ({
@@ -235,12 +286,22 @@ export function MarkdownPreview({ content, permalinks }: MarkdownPreviewProps) {
   }
 
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, [remarkWikiLink, wikiLinkOptions]]}
-      components={markdownComponents}
-      unwrapDisallowed={true}
-    >
-      {content}
-    </ReactMarkdown>
+    <>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkBreaks, [remarkWikiLink, wikiLinkOptions]]}
+        components={markdownComponents}
+        unwrapDisallowed={true}
+      >
+        {content}
+      </ReactMarkdown>
+      
+      {/* 画像ギャラリーモーダル */}
+      <ImageGalleryModal
+        images={images}
+        initialIndex={galleryIndex}
+        isOpen={galleryOpen}
+        onClose={() => setGalleryOpen(false)}
+      />
+    </>
   );
 }

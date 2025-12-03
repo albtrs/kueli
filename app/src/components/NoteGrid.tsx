@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import Link from 'next/link';
 import { Note } from '@/lib/types';
-import { fetchNotesPage, togglePin, toggleArchive, deleteNote } from '@/actions/note';
+import { fetchNotesPage, togglePin, toggleArchive, deleteNote, duplicateNote } from '@/actions/note';
 import { formatDateJST, stripMarkdown } from '@/lib/utils';
 import { extractYouTubeThumbnail, extractTweetId, extractFirstExternalLink } from '@/lib/media-utils';
 import { extractFirstMedia } from '@/lib/file-utils';
@@ -15,7 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Play, Link as LinkIcon, Loader2, MoreVertical, Pin, Trash2, Archive, ArchiveRestore } from 'lucide-react';
+import { Play, Link as LinkIcon, Loader2, MoreVertical, Pin, Trash2, Archive, ArchiveRestore, Copy } from 'lucide-react';
 
 interface NoteGridProps {
   // 従来の静的表示用（ピン留めセクションなど）
@@ -31,6 +31,7 @@ interface NoteGridProps {
   onNoteUpdate?: (note: Note) => void;
   onNoteDelete?: (noteId: string) => void;
   onNoteArchive?: (noteId: string, isArchived: boolean) => void;
+  onNoteDuplicate?: (note: Note) => void;
 }
 
 export function NoteGrid({ 
@@ -44,6 +45,7 @@ export function NoteGrid({
   onNoteUpdate,
   onNoteDelete,
   onNoteArchive,
+  onNoteDuplicate,
 }: NoteGridProps) {
   // 無限スクロールモードかどうか
   const isInfiniteMode = initialNotes !== undefined;
@@ -135,6 +137,12 @@ export function NoteGrid({
     onNoteArchive?.(noteId, isArchived);
   }, [includeArchived, onNoteArchive]);
 
+  // ノートの複製
+  const handleNoteDuplicate = useCallback((newNote: Note) => {
+    setDisplayNotes(prev => [newNote, ...prev]);
+    onNoteDuplicate?.(newNote);
+  }, [onNoteDuplicate]);
+
   return (
     <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -145,6 +153,7 @@ export function NoteGrid({
             onUpdate={handleNoteUpdate}
             onDelete={handleNoteDelete}
             onArchive={handleNoteArchive}
+            onDuplicate={handleNoteDuplicate}
           />
         ))}
       </div>
@@ -171,11 +180,13 @@ function NoteCard({
   onUpdate,
   onDelete,
   onArchive,
+  onDuplicate,
 }: { 
   note: Note; 
   onUpdate?: (note: Note) => void;
   onDelete?: (noteId: string) => void;
   onArchive?: (noteId: string, isArchived: boolean) => void;
+  onDuplicate?: (note: Note) => void;
 }) {
   const media = extractFirstMedia(note.content, note.images || []);
   const youtubeThumbnail = !media ? extractYouTubeThumbnail(note.content) : null;
@@ -269,6 +280,18 @@ function NoteCard({
     }
   };
 
+  // 複製
+  const handleDuplicate = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      const newNote = await duplicateNote(note.id);
+      onDuplicate?.(newNote);
+    } catch (error) {
+      console.error('Failed to duplicate note:', error);
+    }
+  };
+
   return (
     <Link href={`/notes/${note.id}`} className="block">
       <Card
@@ -321,6 +344,10 @@ function NoteCard({
                   アーカイブ
                 </>
               )}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleDuplicate}>
+              <Copy className="h-4 w-4 mr-2" />
+              複製
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem 
