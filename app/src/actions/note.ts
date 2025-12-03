@@ -3,7 +3,7 @@
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
-import { Note, NoteCreateData, NoteUpdateData } from '@/lib/types'
+import { Note, NoteVersion, NoteCreateData, NoteUpdateData } from '@/lib/types'
 import { UnauthorizedError, NotFoundError, handleServerActionError } from '@/lib/errors'
 
 // ページネーション結果の型
@@ -14,6 +14,19 @@ export interface NotesPageResult {
 }
 
 const DEFAULT_PAGE_SIZE = 20
+
+// バージョン管理設定
+const VERSION_INTERVAL_MS = 30 * 60 * 1000; // 30分（ms）
+const MAX_VERSIONS_PER_NOTE = 20; // 1ノートあたりの最大履歴数
+
+// Helper: コンテンツからタグを抽出（#で始まる単語）
+function extractTagsFromContent(content: string): string {
+  const tagRegex = /#([^\s#]+)/g
+  const matches = content.match(tagRegex)
+  if (!matches) return '[]'
+  const tags = [...new Set(matches.map(t => t.slice(1)))]
+  return JSON.stringify(tags)
+}
 
 // Helper: Parse JSON fields
 function parseNote(dbNote: any): Note {
@@ -162,17 +175,71 @@ export async function saveNote(id: string | null, data: NoteCreateData | NoteUpd
       throw new UnauthorizedError()
     }
 
+    // 既存ノートの場合、現在の値を取得して保持
+    let existingNote: any = null
+    if (id) {
+      existingNote = await prisma.note.findUnique({ where: { id } })
+    }
+
     const noteData = {
       title: data.title || '無題のメモ',
       content: data.content || '',
-      isPinned: data.isPinned || false,
-      isArchived: ('isArchived' in data ? data.isArchived : false) || false,
+      // 明示的に指定されていない場合は既存の値を保持、なければデフォルト値
+      isPinned: data.isPinned !== undefined ? data.isPinned : (existingNote?.isPinned ?? false),
+      isArchived: ('isArchived' in data && data.isArchived !== undefined) ? data.isArchived : (existingNote?.isArchived ?? false),
       tags: JSON.stringify(data.tags || []),
-      images: JSON.stringify(data.images || []),
+      images: data.images !== undefined ? JSON.stringify(data.images) : (existingNote?.images ?? '[]'),
     }
 
     let note
     if (id) {
+      // 既存ノートの更新時：バージョン管理を適用
+      // existingNote は上で既に取得済み
+      const currentNote = existingNote
+      
+      if (currentNote) {
+        // 最新のバージョンを取得
+        const lastVersion = await prisma.noteVersion.findFirst({
+          where: { noteId: id },
+          orderBy: { createdAt: 'desc' },
+        })
+        
+        const now = new Date()
+        const shouldCreateVersion = 
+          !lastVersion || 
+          (now.getTime() - lastVersion.createdAt.getTime() > VERSION_INTERVAL_MS)
+        
+        // 一定時間経過していたら、現在の状態をバージョンとして保存
+        if (shouldCreateVersion && (currentNote.title || currentNote.content)) {
+          await prisma.noteVersion.create({
+            data: {
+              noteId: id,
+              title: currentNote.title,
+              content: currentNote.content,
+              tags: currentNote.tags, // tagsも保存
+            }
+          })
+          
+          // 古いバージョンのクリーンアップ
+          const versionCount = await prisma.noteVersion.count({
+            where: { noteId: id }
+          })
+          
+          if (versionCount > MAX_VERSIONS_PER_NOTE) {
+            // 最も古いバージョンを削除
+            const oldestVersion = await prisma.noteVersion.findFirst({
+              where: { noteId: id },
+              orderBy: { createdAt: 'asc' },
+            })
+            if (oldestVersion) {
+              await prisma.noteVersion.delete({
+                where: { id: oldestVersion.id }
+              })
+            }
+          }
+        }
+      }
+      
       // Update existing note
       note = await prisma.note.update({
         where: { id },
@@ -259,6 +326,128 @@ export async function toggleArchive(id: string): Promise<Note> {
     return parseNote(updated)
   } catch (error) {
     console.error('toggleArchive error:', handleServerActionError(error))
+    throw error
+  }
+}
+
+// ========== バージョン管理関連 ==========
+
+/**
+ * ノートのバージョン履歴を取得
+ */
+export async function fetchNoteVersions(noteId: string): Promise<NoteVersion[]> {
+  try {
+    const session = await auth()
+    if (!session?.user) {
+      throw new UnauthorizedError()
+    }
+
+    const versions = await prisma.noteVersion.findMany({
+      where: { noteId },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    return versions
+  } catch (error) {
+    console.error('fetchNoteVersions error:', handleServerActionError(error))
+    throw error
+  }
+}
+
+/**
+ * 特定のバージョンを取得
+ */
+export async function fetchNoteVersion(versionId: string): Promise<NoteVersion | null> {
+  try {
+    const session = await auth()
+    if (!session?.user) {
+      throw new UnauthorizedError()
+    }
+
+    const version = await prisma.noteVersion.findUnique({
+      where: { id: versionId },
+    })
+
+    return version
+  } catch (error) {
+    console.error('fetchNoteVersion error:', handleServerActionError(error))
+    throw error
+  }
+}
+
+/**
+ * バージョンを復元（現在のノートを指定バージョンの内容で上書き）
+ */
+export async function restoreNoteVersion(versionId: string): Promise<Note> {
+  try {
+    const session = await auth()
+    if (!session?.user) {
+      throw new UnauthorizedError()
+    }
+
+    const version = await prisma.noteVersion.findUnique({
+      where: { id: versionId },
+    })
+    
+    if (!version) {
+      throw new NotFoundError('Version not found')
+    }
+
+    // 現在の状態をバージョンとして保存（復元前のバックアップ）
+    const currentNote = await prisma.note.findUnique({
+      where: { id: version.noteId },
+    })
+    
+    if (currentNote) {
+      await prisma.noteVersion.create({
+        data: {
+          noteId: version.noteId,
+          title: currentNote.title,
+          content: currentNote.content,
+          tags: currentNote.tags, // tagsも保存
+        }
+      })
+    }
+
+    // ノートを復元（tagsはバージョンに保存されていればそれを使用、なければ再計算）
+    const restoredTags = version.tags && version.tags !== '[]' 
+      ? version.tags 
+      : extractTagsFromContent(version.content)
+
+    const restored = await prisma.note.update({
+      where: { id: version.noteId },
+      data: {
+        title: version.title,
+        content: version.content,
+        tags: restoredTags,
+      },
+    })
+
+    revalidatePath('/')
+    revalidatePath(`/notes/${version.noteId}`)
+    
+    return parseNote(restored)
+  } catch (error) {
+    console.error('restoreNoteVersion error:', handleServerActionError(error))
+    throw error
+  }
+}
+
+/**
+ * バージョンを削除
+ */
+export async function deleteNoteVersion(versionId: string): Promise<void> {
+  try {
+    const session = await auth()
+    if (!session?.user) {
+      throw new UnauthorizedError()
+    }
+
+    await prisma.noteVersion.delete({
+      where: { id: versionId },
+    })
+  } catch (error) {
+    console.error('deleteNoteVersion error:', handleServerActionError(error))
     throw error
   }
 }

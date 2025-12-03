@@ -3,12 +3,15 @@
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { exportNotes, importNotes } from '@/actions/backup';
-import { Download, Upload, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Download, Upload, Loader2, CheckCircle, AlertCircle, FileArchive, Image } from 'lucide-react';
 
 export function BackupControls() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isExportingAttachments, setIsExportingAttachments] = useState(false);
+  const [isImportingAttachments, setIsImportingAttachments] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // メッセージを一定時間後にクリア
@@ -17,7 +20,7 @@ export function BackupControls() {
     setTimeout(() => setMessage(null), 5000);
   };
 
-  // エクスポート処理
+  // ノートエクスポート処理
   const handleExport = async () => {
     setIsExporting(true);
     setMessage(null);
@@ -43,7 +46,8 @@ export function BackupControls() {
       URL.revokeObjectURL(url);
       
       const data = JSON.parse(jsonContent);
-      showMessage('success', `${data.noteCount}件のノートをエクスポートしました`);
+      const versionInfo = data.versionCount ? `、履歴 ${data.versionCount}件` : '';
+      showMessage('success', `${data.noteCount}件のノート${versionInfo}をエクスポートしました`);
     } catch (error) {
       console.error('Export failed:', error);
       showMessage('error', 'エクスポートに失敗しました');
@@ -52,12 +56,12 @@ export function BackupControls() {
     }
   };
 
-  // インポートボタンクリック
+  // ノートインポートボタンクリック
   const handleImportClick = () => {
     fileInputRef.current?.click();
   };
 
-  // ファイル選択時の処理
+  // ノートファイル選択時の処理
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -66,6 +70,7 @@ export function BackupControls() {
     const confirmed = window.confirm(
       '⚠️ インポートの確認\n\n' +
       '同じIDを持つノートは上書きされます。\n' +
+      'バージョン履歴も含まれている場合は復元されます。\n' +
       'この操作は元に戻せません。\n\n' +
       '続行しますか？'
     );
@@ -84,9 +89,10 @@ export function BackupControls() {
       const result = await importNotes(content);
 
       if (result.success) {
+        const versionInfo = result.versionsCreated ? `、履歴 ${result.versionsCreated}件復元` : '';
         showMessage(
           'success',
-          `インポート完了: ${result.created}件作成、${result.updated}件更新`
+          `インポート完了: ${result.created}件作成、${result.updated}件更新${versionInfo}`
         );
         // ページをリロードして変更を反映
         window.location.reload();
@@ -103,47 +109,204 @@ export function BackupControls() {
     }
   };
 
+  // 添付ファイルエクスポート処理
+  const handleExportAttachments = async () => {
+    setIsExportingAttachments(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch('/api/attachments/export');
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'エクスポートに失敗しました');
+      }
+      
+      // ダウンロード
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      
+      // Content-Dispositionからファイル名を取得
+      const contentDisposition = response.headers.get('Content-Disposition');
+      const filenameMatch = contentDisposition?.match(/filename="(.+?)"/);
+      const filename = filenameMatch ? filenameMatch[1] : 'attachments_backup.zip';
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      URL.revokeObjectURL(url);
+      
+      showMessage('success', '添付ファイルをエクスポートしました');
+    } catch (error) {
+      console.error('Attachment export failed:', error);
+      showMessage('error', error instanceof Error ? error.message : '添付ファイルのエクスポートに失敗しました');
+    } finally {
+      setIsExportingAttachments(false);
+    }
+  };
+
+  // 添付ファイルインポートボタンクリック
+  const handleImportAttachmentsClick = () => {
+    attachmentInputRef.current?.click();
+  };
+
+  // 添付ファイル選択時の処理
+  const handleAttachmentFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // 確認ダイアログ
+    const confirmed = window.confirm(
+      '⚠️ インポートの確認\n\n' +
+      '同じ名前のファイルは上書きされます。\n' +
+      'この操作は元に戻せません。\n\n' +
+      '続行しますか？'
+    );
+
+    if (!confirmed) {
+      e.target.value = '';
+      return;
+    }
+
+    setIsImportingAttachments(true);
+    setMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch('/api/attachments/import', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const result = await response.json();
+
+      if (result.success) {
+        showMessage(
+          'success',
+          `添付ファイルインポート完了: ${result.totalImported}件`
+        );
+      } else {
+        showMessage('error', result.error || 'インポートに失敗しました');
+      }
+    } catch (error) {
+      console.error('Attachment import failed:', error);
+      showMessage('error', '添付ファイルのインポートに失敗しました');
+    } finally {
+      setIsImportingAttachments(false);
+      e.target.value = '';
+    }
+  };
+
+  const isAnyLoading = isExporting || isImporting || isExportingAttachments || isImportingAttachments;
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-3">
-        {/* エクスポートボタン */}
-        <Button
-          variant="outline"
-          onClick={handleExport}
-          disabled={isExporting || isImporting}
-          className="gap-2"
-        >
-          {isExporting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4" />
-          )}
-          Export JSON
-        </Button>
+    <div className="space-y-6">
+      {/* ノートバックアップ */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-medium flex items-center gap-2">
+          <FileArchive className="h-4 w-4" />
+          ノートデータ
+        </h3>
+        <div className="flex flex-wrap gap-3">
+          {/* エクスポートボタン */}
+          <Button
+            variant="outline"
+            onClick={handleExport}
+            disabled={isAnyLoading}
+            className="gap-2"
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Export JSON
+          </Button>
 
-        {/* インポートボタン */}
-        <Button
-          variant="outline"
-          onClick={handleImportClick}
-          disabled={isExporting || isImporting}
-          className="gap-2"
-        >
-          {isImporting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Upload className="h-4 w-4" />
-          )}
-          Import JSON
-        </Button>
+          {/* インポートボタン */}
+          <Button
+            variant="outline"
+            onClick={handleImportClick}
+            disabled={isAnyLoading}
+            className="gap-2"
+          >
+            {isImporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="h-4 w-4" />
+            )}
+            Import JSON
+          </Button>
 
-        {/* 隠しファイル入力 */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json"
-          onChange={handleFileChange}
-          className="hidden"
-        />
+          {/* 隠しファイル入力 */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          ノートとバージョン履歴をJSON形式でバックアップできます。
+        </p>
+      </div>
+
+      {/* 添付ファイルバックアップ */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-medium flex items-center gap-2">
+          <Image className="h-4 w-4" />
+          添付ファイル
+        </h3>
+        <div className="flex flex-wrap gap-3">
+          {/* エクスポートボタン */}
+          <Button
+            variant="outline"
+            onClick={handleExportAttachments}
+            disabled={isAnyLoading}
+            className="gap-2"
+          >
+            {isExportingAttachments ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Export ZIP
+          </Button>
+
+          {/* インポートボタン */}
+          <Button
+            variant="outline"
+            onClick={handleImportAttachmentsClick}
+            disabled={isAnyLoading}
+            className="gap-2"
+          >
+            {isImportingAttachments ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="h-4 w-4" />
+            )}
+            Import ZIP
+          </Button>
+
+          {/* 隠しファイル入力 */}
+          <input
+            ref={attachmentInputRef}
+            type="file"
+            accept=".zip"
+            onChange={handleAttachmentFileChange}
+            className="hidden"
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          アップロードした添付ファイルをZIP形式でバックアップできます。
+        </p>
       </div>
 
       {/* メッセージ表示 */}
@@ -163,12 +326,6 @@ export function BackupControls() {
           <span className="whitespace-pre-wrap">{message.text}</span>
         </div>
       )}
-
-      {/* 説明テキスト */}
-      <p className="text-xs text-muted-foreground">
-        エクスポートしたJSONファイルは、このアプリのバックアップとして保存できます。
-        インポート時、同じIDのノートは上書きされます。
-      </p>
     </div>
   );
 }

@@ -8,7 +8,7 @@ import { fetchNote, fetchNotes, deleteNote } from '@/actions/note';
 import { Note } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { generateDateTimeTitle } from '@/lib/datetime';
-import { createTableTemplate, formatMarkdownTable, findTableRange } from '@/lib/table-utils';
+import { createTableTemplate, formatMarkdownTable, findTableRange, convertTabsToSpaces } from '@/lib/table-utils';
 import { useAutoSave, useFileUpload } from '@/hooks';
 import { 
   getMarkdownExtension, 
@@ -22,7 +22,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { EditorToolbar } from '@/components/EditorToolbar';
 import { MarkdownPreview } from '@/components/MarkdownPreview';
-import { Loader2, Check, Upload, Save, Trash2 } from 'lucide-react';
+import { VersionHistory } from '@/components/VersionHistory';
+import { Loader2, Check, Upload, Save, Trash2, History } from 'lucide-react';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 
 // CodeMirrorは動的インポート（SSR無効化）
@@ -54,6 +55,7 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
   const [extensions, setExtensions] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'write' | 'preview'>(isNewMode ? 'write' : 'preview');
   const [allNotes, setAllNotes] = useState<Note[]>([]);
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
 
   const editorRef = useRef<ReactCodeMirrorRef>(null);
 
@@ -241,7 +243,7 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
     }
   }, []);
 
-  // テーブル整形
+  // テーブル整形 & タブ→スペース変換
   const handleFormatTable = useCallback(() => {
     const view = editorRef.current?.view;
     if (!view) return;
@@ -249,24 +251,44 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
     const range = view.state.selection.main;
     
     if (range.from !== range.to) {
+      // 選択範囲がある場合
       const selectedText = view.state.sliceDoc(range.from, range.to);
       if (selectedText.includes('|')) {
+        // テーブルを含む場合はテーブル整形（タブ変換も含む）
         const formatted = formatMarkdownTable(selectedText);
+        view.dispatch({
+          changes: { from: range.from, to: range.to, insert: formatted }
+        });
+      } else if (selectedText.includes('\t')) {
+        // タブを含む場合はスペースに変換
+        const formatted = convertTabsToSpaces(selectedText);
         view.dispatch({
           changes: { from: range.from, to: range.to, insert: formatted }
         });
       }
     } else {
+      // 選択範囲がない場合
       const tableRange = findTableRange(content, range.from);
       if (tableRange) {
+        // カーソルがテーブル内ならテーブル整形
         const formatted = formatMarkdownTable(tableRange.text);
         view.dispatch({
           changes: { from: tableRange.from, to: tableRange.to, insert: formatted }
         });
+      } else if (content.includes('\t')) {
+        // テーブル外でタブがある場合は全体のタブをスペースに変換
+        const formatted = convertTabsToSpaces(content);
+        const docLength = view.state.doc.length;
+        view.dispatch({
+          changes: { from: 0, to: docLength, insert: formatted }
+        });
+        // コンテンツを更新
+        setContent(formatted);
+        scheduleSave(title, formatted);
       }
     }
     view.focus();
-  }, [content]);
+  }, [content, title, scheduleSave]);
 
   // ファイル選択ハンドラ
   const handleFileSelect = useCallback(async (fileList: FileList) => {
@@ -282,6 +304,13 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
     () => createDropHandler(insertTextAtCursor),
     [createDropHandler, insertTextAtCursor]
   );
+
+  // 履歴からの復元ハンドラ
+  const handleRestoreVersion = useCallback((restoredTitle: string, restoredContent: string) => {
+    setTitle(restoredTitle);
+    setContent(restoredContent);
+    setShowHistoryPanel(false);
+  }, []);
 
   // ローディング中
   if (isLoading || status === 'loading') {
@@ -299,155 +328,180 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
 
   return (
     <DashboardLayout hideSidebar>
-      <div className="flex flex-col h-full overflow-hidden px-4 pb-4 md:px-6">
-        <div className="max-w-5xl mx-auto w-full h-full flex flex-col">
-          {/* タブ + アクションボタン */}
-          <div className="flex items-center justify-between py-3 gap-2">
-            {/* タブ切り替えボタン */}
-            <div className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground">
-              <button
-                onClick={() => setActiveTab('write')}
-                className={cn(
-                  "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                  activeTab === 'write' 
-                    ? "bg-background text-foreground shadow" 
-                    : "hover:bg-background/50"
-                )}
-              >
-                編集
-              </button>
-              <button
-                onClick={() => setActiveTab('preview')}
-                className={cn(
-                  "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                  activeTab === 'preview' 
-                    ? "bg-background text-foreground shadow" 
-                    : "hover:bg-background/50"
-                )}
-              >
-                プレビュー
-              </button>
-            </div>
-            
-            {/* 保存状態とアクションボタン */}
-            <div className="flex items-center gap-2">
-              {/* 保存状態インジケータ */}
-              <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                {saveStatus === 'new' && <span className="hidden sm:inline">新規作成</span>}
-                {saveStatus === 'saving' && (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="hidden sm:inline">保存中...</span>
-                  </>
-                )}
-                {saveStatus === 'saved' && (
-                  <>
-                    <Check className="h-4 w-4 text-green-500" />
-                    <span className="hidden sm:inline">保存済み</span>
-                  </>
-                )}
-                {saveStatus === 'unsaved' && <span className="hidden sm:inline">未保存</span>}
-              </div>
-              
-              {/* 保存ボタン */}
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleManualSave} 
-                className="h-8 gap-1"
-                disabled={isSaveDisabled}
-              >
-                <Save className="h-4 w-4" />
-                <span className="hidden sm:inline">保存</span>
-              </Button>
-              
-              {/* 削除ボタン */}
-              {showDeleteButton && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={handleDelete} 
-                  className="h-8 gap-1 text-destructive hover:text-destructive hover:bg-destructive/10"
+      <div className="flex h-full overflow-hidden">
+        {/* メインエディタエリア */}
+        <div className="flex-1 flex flex-col h-full overflow-hidden px-4 pb-4 md:px-6">
+          <div className="max-w-5xl mx-auto w-full h-full flex flex-col">
+            {/* タブ + アクションボタン */}
+            <div className="flex items-center justify-between py-3 gap-2">
+              {/* タブ切り替えボタン */}
+              <div className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground">
+                <button
+                  onClick={() => setActiveTab('write')}
+                  className={cn(
+                    "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    activeTab === 'write' 
+                      ? "bg-background text-foreground shadow" 
+                      : "hover:bg-background/50"
+                  )}
                 >
-                  <Trash2 className="h-4 w-4" />
-                  <span className="hidden sm:inline">削除</span>
+                  編集
+                </button>
+                <button
+                  onClick={() => setActiveTab('preview')}
+                  className={cn(
+                    "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    activeTab === 'preview' 
+                      ? "bg-background text-foreground shadow" 
+                      : "hover:bg-background/50"
+                  )}
+                >
+                  プレビュー
+                </button>
+              </div>
+            
+              {/* 保存状態とアクションボタン */}
+              <div className="flex items-center gap-2">
+                {/* 保存状態インジケータ */}
+                <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                  {saveStatus === 'new' && <span className="hidden sm:inline">新規作成</span>}
+                  {saveStatus === 'saving' && (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="hidden sm:inline">保存中...</span>
+                    </>
+                  )}
+                  {saveStatus === 'saved' && (
+                    <>
+                      <Check className="h-4 w-4 text-green-500" />
+                      <span className="hidden sm:inline">保存済み</span>
+                    </>
+                  )}
+                  {saveStatus === 'unsaved' && <span className="hidden sm:inline">未保存</span>}
+                </div>
+              
+                {/* 保存ボタン */}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleManualSave} 
+                  className="h-8 gap-1"
+                  disabled={isSaveDisabled}
+                >
+                  <Save className="h-4 w-4" />
+                  <span className="hidden sm:inline">保存</span>
                 </Button>
+              
+                {/* 削除ボタン */}
+                {showDeleteButton && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={handleDelete} 
+                    className="h-8 gap-1 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span className="hidden sm:inline">削除</span>
+                  </Button>
+                )}
+              
+                {/* 履歴ボタン */}
+                {currentNoteId && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowHistoryPanel(!showHistoryPanel)}
+                    className={cn("h-8 gap-1", showHistoryPanel && "bg-muted")}
+                  >
+                    <History className="h-4 w-4" />
+                    <span className="hidden sm:inline">履歴</span>
+                  </Button>
+                )}
+              </div>
+            </div>
+          
+            {/* タイトル入力欄 */}
+            <Input
+              value={title}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              placeholder="タイトル"
+              className="mb-3 text-xl md:text-2xl font-bold border-none focus-visible:ring-0 px-0"
+            />
+
+            {/* コンテンツエリア */}
+            <div className="flex-1 min-h-0 relative">
+              {/* 編集タブ */}
+              <div className={cn(
+                "h-full flex flex-col",
+                activeTab !== 'write' && "hidden"
+              )}>
+                <EditorToolbar 
+                  onInsertTable={handleInsertTable}
+                  onFormatTable={handleFormatTable}
+                  onFileSelect={handleFileSelect}
+                  isUploading={isUploading}
+                />
+
+                <div
+                  className={cn(
+                    "relative flex-1 min-h-0 rounded-sm border transition-colors overflow-hidden",
+                    isDragOver ? 'border-primary border-2 bg-primary/5' : 'border-input'
+                  )}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
+                  {isDragOver && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 rounded">
+                      <div className="flex flex-col items-center gap-2 text-primary">
+                        <Upload className="h-8 w-8" />
+                      </div>
+                    </div>
+                  )}
+                  {isUploading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 rounded">
+                      <div className="flex flex-col items-center gap-2 text-primary">
+                        <Loader2 className="h-8 w-8 animate-spin" />
+                        <span>アップロード中...</span>
+                      </div>
+                    </div>
+                  )}
+                  <CodeMirror
+                    ref={editorRef}
+                    value={content}
+                    height="100%"
+                    extensions={extensions}
+                    onChange={handleContentChange}
+                    placeholder="Markdownで入力..."
+                    className="h-full overflow-hidden [&_.cm-editor]:h-full [&_.cm-editor]:outline-none [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:h-full [&_.cm-scroller]:overflow-y-auto [&_.cm-scroller]:overflow-x-hidden"
+                    basicSetup={{
+                      lineNumbers: false,
+                      foldGutter: false,
+                      highlightActiveLine: true,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* プレビュータブ */}
+              {activeTab === 'preview' && (
+                <div className="h-full overflow-auto">
+                  <MarkdownPreview content={content} permalinks={permalinks} />
+                </div>
               )}
             </div>
           </div>
-          
-          {/* タイトル入力欄 */}
-          <Input
-            value={title}
-            onChange={(e) => handleTitleChange(e.target.value)}
-            placeholder="タイトル"
-            className="mb-3 text-xl md:text-2xl font-bold border-none focus-visible:ring-0 px-0"
-          />
-
-          {/* コンテンツエリア */}
-          <div className="flex-1 min-h-0 relative">
-            {/* 編集タブ */}
-            <div className={cn(
-              "h-full flex flex-col",
-              activeTab !== 'write' && "hidden"
-            )}>
-              <EditorToolbar 
-                onInsertTable={handleInsertTable}
-                onFormatTable={handleFormatTable}
-                onFileSelect={handleFileSelect}
-                isUploading={isUploading}
-              />
-
-              <div
-                className={cn(
-                  "relative flex-1 min-h-0 rounded-sm border transition-colors overflow-hidden",
-                  isDragOver ? 'border-primary border-2 bg-primary/5' : 'border-input'
-                )}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              >
-                {isDragOver && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 rounded">
-                    <div className="flex flex-col items-center gap-2 text-primary">
-                      <Upload className="h-8 w-8" />
-                    </div>
-                  </div>
-                )}
-                {isUploading && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 rounded">
-                    <div className="flex flex-col items-center gap-2 text-primary">
-                      <Loader2 className="h-8 w-8 animate-spin" />
-                      <span>アップロード中...</span>
-                    </div>
-                  </div>
-                )}
-                <CodeMirror
-                  ref={editorRef}
-                  value={content}
-                  height="100%"
-                  extensions={extensions}
-                  onChange={handleContentChange}
-                  placeholder="Markdownで入力..."
-                  className="h-full overflow-hidden [&_.cm-editor]:h-full [&_.cm-editor]:outline-none [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:h-full [&_.cm-scroller]:overflow-y-auto [&_.cm-scroller]:overflow-x-hidden"
-                  basicSetup={{
-                    lineNumbers: false,
-                    foldGutter: false,
-                    highlightActiveLine: true,
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* プレビュータブ */}
-            {activeTab === 'preview' && (
-              <div className="h-full overflow-auto">
-                <MarkdownPreview content={content} permalinks={permalinks} />
-              </div>
-            )}
-          </div>
         </div>
       </div>
+      
+      {/* 履歴モーダル */}
+      {showHistoryPanel && currentNoteId && (
+        <VersionHistory
+          noteId={currentNoteId}
+          onRestore={handleRestoreVersion}
+          onClose={() => setShowHistoryPanel(false)}
+        />
+      )}
     </DashboardLayout>
   );
 }

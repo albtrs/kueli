@@ -5,19 +5,24 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Loader2, Trash2, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Loader2, Trash2, ExternalLink, AlertTriangle, History, CheckCircle } from 'lucide-react';
+
+type FileUsageStatus = 'current' | 'history' | 'unused';
 
 interface FileInfo {
   filename: string;
   size: number;
   createdAt: string;
-  isUsed: boolean;
+  status: FileUsageStatus;
+  inCurrent: boolean;
+  inHistory: boolean;
 }
 
 interface FilesResponse {
   files: FileInfo[];
   totalCount: number;
-  usedCount: number;
+  currentCount: number;
+  historyCount: number;
   unusedCount: number;
 }
 
@@ -32,6 +37,38 @@ function formatDate(dateStr: string): string {
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+function StatusBadge({ status, inCurrent, inHistory }: { status: FileUsageStatus; inCurrent: boolean; inHistory: boolean }) {
+  if (status === 'current') {
+    return (
+      <div className="flex flex-col gap-0.5">
+        <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+          <CheckCircle className="h-3 w-3" />
+          使用中
+        </span>
+        {inHistory && (
+          <span className="text-[10px] text-muted-foreground">+履歴</span>
+        )}
+      </div>
+    );
+  }
+  
+  if (status === 'history') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+        <History className="h-3 w-3" />
+        履歴のみ
+      </span>
+    );
+  }
+  
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+      <AlertTriangle className="h-3 w-3" />
+      未使用
+    </span>
+  );
+}
+
 export default function AttachmentsPage() {
   const router = useRouter();
   const { status } = useSession();
@@ -39,7 +76,7 @@ export default function AttachmentsPage() {
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [stats, setStats] = useState({ total: 0, used: 0, unused: 0 });
+  const [stats, setStats] = useState({ total: 0, current: 0, history: 0, unused: 0 });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -65,7 +102,8 @@ export default function AttachmentsPage() {
       setFiles(data.files);
       setStats({
         total: data.totalCount,
-        used: data.usedCount,
+        current: data.currentCount,
+        history: data.historyCount,
         unused: data.unusedCount,
       });
     } catch (e) {
@@ -94,8 +132,10 @@ export default function AttachmentsPage() {
       const result = await response.json();
       if (result.deleted.length > 0) {
         await fetchFiles();
-      } else if (result.skipped.length > 0) {
-        alert('このファイルは使用中のため削除できません');
+      } else if (result.skippedCurrent.length > 0) {
+        alert('このファイルは現在使用中のため削除できません');
+      } else if (result.skippedHistory.length > 0) {
+        alert('このファイルは履歴で使用中のため削除できません');
       } else {
         alert('削除に失敗しました');
       }
@@ -108,7 +148,7 @@ export default function AttachmentsPage() {
   };
 
   const deleteAllUnused = async () => {
-    const unusedFiles = files.filter(f => !f.isUsed);
+    const unusedFiles = files.filter(f => f.status === 'unused');
     if (unusedFiles.length === 0) {
       alert('未使用のファイルはありません');
       return;
@@ -158,9 +198,11 @@ export default function AttachmentsPage() {
             <div>
               <h1 className="text-2xl font-bold">添付ファイル</h1>
               <p className="text-muted-foreground mt-1 text-sm">
-                {stats.total}件 | 使用中 {stats.used} | 
+                {stats.total}件 | 
+                <span className="text-green-600"> 使用中 {stats.current}</span> | 
+                <span className="text-blue-600"> 履歴 {stats.history}</span> | 
                 <span className={stats.unused > 0 ? 'text-amber-600 font-medium' : ''}>
-                  {' '}未使用 {stats.unused}
+                  未使用 {stats.unused}
                 </span>
               </p>
             </div>
@@ -213,7 +255,7 @@ export default function AttachmentsPage() {
                     {files.map((file) => (
                       <tr 
                         key={file.filename}
-                        className={`border-t ${!file.isUsed ? 'bg-amber-50 dark:bg-amber-950/20' : ''}`}
+                        className={`border-t ${file.status === 'unused' ? 'bg-amber-50 dark:bg-amber-950/20' : file.status === 'history' ? 'bg-blue-50 dark:bg-blue-950/20' : ''}`}
                       >
                         <td className="px-3 py-2">
                           <a
@@ -233,17 +275,10 @@ export default function AttachmentsPage() {
                           {formatDate(file.createdAt)}
                         </td>
                         <td className="px-3 py-2">
-                          {file.isUsed ? (
-                            <span className="text-xs text-green-600 dark:text-green-400">使用中</span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-                              <AlertTriangle className="h-3 w-3" />
-                              未使用
-                            </span>
-                          )}
+                          <StatusBadge status={file.status} inCurrent={file.inCurrent} inHistory={file.inHistory} />
                         </td>
                         <td className="px-3 py-2 text-center">
-                          {!file.isUsed && (
+                          {file.status === 'unused' && (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -266,7 +301,13 @@ export default function AttachmentsPage() {
                 {files.map((file) => (
                   <div 
                     key={file.filename}
-                    className={`border rounded-lg p-3 ${!file.isUsed ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800' : ''}`}
+                    className={`border rounded-lg p-3 ${
+                      file.status === 'unused' 
+                        ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800' 
+                        : file.status === 'history'
+                        ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800'
+                        : ''
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <a
@@ -277,7 +318,7 @@ export default function AttachmentsPage() {
                       >
                         {file.filename}
                       </a>
-                      {!file.isUsed && (
+                      {file.status === 'unused' && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -292,14 +333,7 @@ export default function AttachmentsPage() {
                     <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
                       <span>{formatFileSize(file.size)}</span>
                       <span>{formatDate(file.createdAt)}</span>
-                      {file.isUsed ? (
-                        <span className="text-green-600 dark:text-green-400">使用中</span>
-                      ) : (
-                        <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                          <AlertTriangle className="h-3 w-3" />
-                          未使用
-                        </span>
-                      )}
+                      <StatusBadge status={file.status} inCurrent={file.inCurrent} inHistory={file.inHistory} />
                     </div>
                   </div>
                 ))}

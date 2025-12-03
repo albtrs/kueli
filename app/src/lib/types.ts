@@ -10,6 +10,15 @@ export interface Note {
   updatedAt: Date;
 }
 
+export interface NoteVersion {
+  id: string;
+  title: string;
+  content: string;
+  tags: string; // JSON string array (preserved for restoration)
+  createdAt: Date;
+  noteId: string;
+}
+
 export interface NoteCreateData {
   title: string;
   content?: string;

@@ -1,6 +1,15 @@
 // Markdownテーブル関連のユーティリティ関数
 
 /**
+ * タブ文字をスペースに変換
+ * @param text 変換対象のテキスト
+ * @param spaceCount タブ1つあたりのスペース数（デフォルト: 2）
+ */
+export const convertTabsToSpaces = (text: string, spaceCount: number = 2): string => {
+  return text.replace(/\t/g, ' '.repeat(spaceCount));
+};
+
+/**
  * テーブルテンプレートを生成
  * @param rows 行数（ヘッダー除く）
  * @param cols 列数
@@ -45,7 +54,9 @@ const padToWidth = (str: string, targetWidth: number): string => {
  * @param text Markdownテーブルのテキスト
  */
 export const formatMarkdownTable = (text: string): string => {
-  const lines = text.trim().split("\n");
+  // まずタブをスペースに変換
+  const normalizedText = convertTabsToSpaces(text);
+  const lines = normalizedText.trim().split("\n");
   const rows = lines.map(line => 
     line.replace(/^\||\|$/g, "").split("|").map(cell => cell.trim())
   );
