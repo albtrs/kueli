@@ -7,7 +7,7 @@ import { fetchNotesPage, togglePin, toggleArchive, deleteNote, duplicateNote } f
 import { formatDateJST, stripMarkdown } from '@/lib/utils';
 import { extractYouTubeThumbnail, extractTweetId, extractFirstExternalLink } from '@/lib/media-utils';
 import { extractFirstMedia } from '@/lib/file-utils';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -230,7 +230,7 @@ function NoteCard({
   
   const hasMedia = media !== null;
   const hasThumbnail = hasMedia || youtubeThumbnail || tweetImage || ogpImage;
-  const excerpt = stripMarkdown(note.content || '').slice(0, 80);
+  const excerpt = stripMarkdown(note.content || '').slice(0, 200);
 
   const handleVideoHover = (e: React.MouseEvent<HTMLVideoElement>, action: 'play' | 'pause') => {
     e.stopPropagation();
@@ -293,188 +293,167 @@ function NoteCard({
   };
 
   return (
-    <Link href={`/notes/${note.id}`} className="block">
-      <Card
-        className="cursor-pointer transition-all hover:border-foreground/20 group overflow-hidden relative h-full"
-      >
-      {/* 右上のアクションエリア: ピン留めアイコン + コンテキストメニュー */}
-      <div className="absolute top-1.5 right-1.5 z-10 flex items-center gap-1">
-        {/* アーカイブインジケータ */}
-        {note.isArchived && (
-          <div className="p-1 rounded-md bg-muted text-muted-foreground">
-            <Archive className="h-3 w-3" />
-          </div>
-        )}
-        {/* ピン留めインジケータ */}
-        {note.isPinned && (
-          <div className="p-1 rounded-md bg-primary text-primary-foreground">
-            <Pin className="h-3 w-3 fill-current" />
-          </div>
-        )}
-        
-        {/* コンテキストメニュー */}
-        <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
-          <DropdownMenuTrigger asChild>
-            <button
-              className={`p-1.5 rounded-md bg-background/80 backdrop-blur-sm border border-border/50 transition-opacity ${
-                isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
-              onClick={(e) => {
-                e.preventDefault(); // リンクのナビゲーションを防止
-                e.stopPropagation();
-              }}
-            >
-              <MoreVertical className="h-4 w-4 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem onClick={handleTogglePin}>
-              <Pin className={`h-4 w-4 mr-2 ${note.isPinned ? 'fill-current' : ''}`} />
-              {note.isPinned ? 'ピン解除' : 'ピン留め'}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleToggleArchive}>
-              {note.isArchived ? (
-                <>
-                  <ArchiveRestore className="h-4 w-4 mr-2" />
-                  復元
-                </>
-              ) : (
-                <>
-                  <Archive className="h-4 w-4 mr-2" />
-                  アーカイブ
-                </>
-              )}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleDuplicate}>
-              <Copy className="h-4 w-4 mr-2" />
-              複製
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem 
-              onClick={handleDelete}
-              className="text-destructive focus:text-destructive"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              削除
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {/* 添付ファイル（画像/動画） */}
-      {hasMedia && (
-        <div className="relative aspect-video overflow-hidden bg-muted">
-          {media.type === 'video' ? (
-            <>
-              <video
-                src={`/api/files/${media.filename}`}
-                className="w-full h-full object-cover"
-                preload="metadata"
-                muted
-                loop
-                playsInline
-                onMouseEnter={(e) => handleVideoHover(e, 'play')}
-                onMouseLeave={(e) => handleVideoHover(e, 'pause')}
-              />
-              {/* 動画アイコン（ホバー時に非表示） */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none group-hover:opacity-0 transition-opacity duration-200">
-                <div className="bg-black/50 rounded p-2">
-                  <Play className="w-5 h-5 text-white fill-white" />
-                </div>
+    <Link href={`/notes/${note.id}`} className="block h-full">
+      <Card className="cursor-pointer transition-all hover:border-foreground/20 group overflow-hidden h-full flex flex-col">
+        {/* ヘッダー: タイトル + ステータス + メニュー */}
+        <div className="flex items-center gap-2 px-3 pt-2.5 pb-2">
+          <h3 
+            className="flex-1 min-w-0 line-clamp-1 text-sm font-medium"
+            title={note.title || '無題'}
+          >
+            {note.title || '無題'}
+          </h3>
+          
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {note.isPinned && (
+              <div className="p-1 rounded-md bg-primary text-primary-foreground">
+                <Pin className="h-3 w-3 fill-current" />
               </div>
-            </>
+            )}
+            {note.isArchived && (
+              <div className="p-1 rounded-md bg-muted text-muted-foreground">
+                <Archive className="h-3 w-3" />
+              </div>
+            )}
+            
+            {/* コンテキストメニュー */}
+            <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="p-1 rounded-md text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted transition-colors"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-36">
+                <DropdownMenuItem onClick={handleTogglePin}>
+                  <Pin className={`h-4 w-4 mr-2 ${note.isPinned ? 'fill-current' : ''}`} />
+                  {note.isPinned ? 'ピン解除' : 'ピン留め'}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleToggleArchive}>
+                  {note.isArchived ? (
+                    <>
+                      <ArchiveRestore className="h-4 w-4 mr-2" />
+                      復元
+                    </>
+                  ) : (
+                    <>
+                      <Archive className="h-4 w-4 mr-2" />
+                      アーカイブ
+                    </>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleDuplicate}>
+                  <Copy className="h-4 w-4 mr-2" />
+                  複製
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={handleDelete}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  削除
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {/* コンテンツエリア: サムネイル or 本文（固定高さ） */}
+        <div className="flex-1 px-3">
+          {hasThumbnail ? (
+            <div className="relative h-32 overflow-hidden bg-muted rounded-md">
+              {hasMedia && media.type === 'video' ? (
+                <>
+                  <video
+                    src={`/api/files/${media.filename}`}
+                    className="w-full h-full object-cover"
+                    preload="metadata"
+                    muted
+                    loop
+                    playsInline
+                    onMouseEnter={(e) => handleVideoHover(e, 'play')}
+                    onMouseLeave={(e) => handleVideoHover(e, 'pause')}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none group-hover:opacity-0 transition-opacity duration-200">
+                    <div className="bg-black/50 rounded p-2">
+                      <Play className="w-5 h-5 text-white fill-white" />
+                    </div>
+                  </div>
+                </>
+              ) : hasMedia ? (
+                <img
+                  src={`/api/files/${media.filename}`}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : youtubeThumbnail ? (
+                <>
+                  <img
+                    src={youtubeThumbnail}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="bg-red-600 rounded-lg px-2 py-1">
+                      <Play className="w-5 h-5 text-white fill-white" />
+                    </div>
+                  </div>
+                </>
+              ) : tweetImage ? (
+                <>
+                  <img
+                    src={tweetImage}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                  <div className="absolute bottom-2 right-2 pointer-events-none">
+                    <div className="bg-black rounded-full p-1">
+                      <svg viewBox="0 0 24 24" className="w-3 h-3 text-white fill-current">
+                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                      </svg>
+                    </div>
+                  </div>
+                </>
+              ) : ogpImage ? (
+                <>
+                  <img
+                    src={ogpImage}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                  <div className="absolute bottom-2 right-2 pointer-events-none">
+                    <div className="bg-black/50 rounded p-1">
+                      <LinkIcon className="w-3 h-3 text-white" />
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
           ) : (
-            <img
-              src={`/api/files/${media.filename}`}
-              alt=""
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).parentElement!.style.display = 'none';
-              }}
-            />
+            <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-[8] h-32 overflow-hidden">
+              {excerpt || 'メモがありません'}
+            </p>
           )}
         </div>
-      )}
-      
-      {/* YouTubeサムネイル */}
-      {!hasMedia && youtubeThumbnail && (
-        <div className="relative aspect-video overflow-hidden bg-muted">
-          <img
-            src={youtubeThumbnail}
-            alt=""
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).parentElement!.style.display = 'none';
-            }}
-          />
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="bg-red-600 rounded-lg px-2 py-1">
-              <Play className="w-5 h-5 text-white fill-white" />
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Twitter/X サムネイル */}
-      {!hasMedia && !youtubeThumbnail && tweetImage && (
-        <div className="relative aspect-video overflow-hidden bg-muted">
-          <img
-            src={tweetImage}
-            alt=""
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).parentElement!.style.display = 'none';
-            }}
-          />
-          <div className="absolute bottom-2 right-2 pointer-events-none">
-            <div className="bg-black rounded-full p-1">
-              <svg viewBox="0 0 24 24" className="w-3 h-3 text-white fill-current">
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-              </svg>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* OGP画像 */}
-      {!hasMedia && !youtubeThumbnail && !tweetImage && ogpImage && (
-        <div className="relative aspect-video overflow-hidden bg-muted">
-          <img
-            src={ogpImage}
-            alt=""
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).parentElement!.style.display = 'none';
-            }}
-          />
-          <div className="absolute bottom-2 right-2 pointer-events-none">
-            <div className="bg-black/50 rounded p-1">
-              <LinkIcon className="w-3 h-3 text-white" />
-            </div>
-          </div>
-        </div>
-      )}
-      
-      <CardHeader className={hasThumbnail ? "pb-1.5 pt-2.5 px-3" : "pb-1.5 px-3"}>
-        <CardTitle className="line-clamp-1 text-sm font-medium">
-          {note.title || '無題'}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-3 pb-3">
-        {/* メディアがある場合は本文を省略 */}
-        {!hasThumbnail && (
-          <p className="line-clamp-2 text-xs text-muted-foreground mb-2">
-            {excerpt || 'メモがありません'}
-          </p>
-        )}
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{formatDateJST(note.updatedAt)}</span>
-          {note.tags && note.tags.length > 0 && (
-            <span className="truncate ml-2 text-[10px]">#{note.tags[0]}{note.tags.length > 1 && ` +${note.tags.length - 1}`}</span>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+      </Card>
     </Link>
   );
 }

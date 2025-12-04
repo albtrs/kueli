@@ -491,6 +491,8 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
                   <PreviewToolbar 
                     isFullSizeImages={isFullSizeImages}
                     onToggleImageSize={() => setIsFullSizeImages(!isFullSizeImages)}
+                    createdAt={note?.createdAt}
+                    updatedAt={note?.updatedAt}
                   />
                   <div className="flex-1 overflow-auto">
                     <MarkdownPreview 
