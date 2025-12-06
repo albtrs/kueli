@@ -25,3 +25,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    
+    # リバプロで使用するネットワークに接続
+    networks:
+      - apps_net
+
+networks:
+  apps_net:
+    external: truek
