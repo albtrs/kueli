@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getIronSession } from 'iron-session'
-import { SessionData, sessionOptions } from './lib/session'
+import { SessionData, getSessionOptions } from './lib/session'
 
 // 認証不要なパス
 const PUBLIC_PATHS = [
@@ -36,7 +36,7 @@ export async function middleware(request: NextRequest) {
   
   try {
     // iron-sessionのセッションを取得
-    const session = await getIronSession<SessionData>(request, response, sessionOptions)
+    const session = await getIronSession<SessionData>(request, response, getSessionOptions())
     
     if (!session.isLoggedIn || !session.user) {
       // 未認証の場合

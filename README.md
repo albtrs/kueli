@@ -63,12 +63,70 @@ docker compose -f docker-compose.production.yml restart
 # 停止
 docker compose -f docker-compose.production.yml down
 
-# アップデート（再ビルド）
-docker compose -f docker-compose.production.yml up -d --build
-
 # ユーザー管理（管理コンテナを起動）
 docker compose -f docker-compose.production.yml run --rm admin sh
 # コンテナ内で npm run user:list 等を実行
+```
+
+### 🔄 アップデート手順
+
+#### コードのみ更新（スキーマ変更なし）
+
+```bash
+cd kueli
+
+# 最新コードを取得
+git pull origin main
+
+# イメージを再ビルドして再起動
+docker compose -f docker-compose.production.yml up -d --build
+
+# 起動確認
+docker logs kueli-app -f
+```
+
+#### DBスキーマ変更を含む更新
+
+```bash
+cd kueli
+
+# 1. アプリを停止
+docker compose -f docker-compose.production.yml down
+
+# 2. データをバックアップ（重要）
+tar -czf backup-$(date +%Y%m%d-%H%M%S).tar.gz data/
+
+# 3. 最新コードを取得
+git pull origin main
+
+# 4. イメージを再ビルド
+docker compose -f docker-compose.production.yml build
+
+# 5. DBマイグレーションを実行
+docker compose -f docker-compose.production.yml run --rm admin sh -c "npx prisma db push"
+
+# 6. アプリを起動
+docker compose -f docker-compose.production.yml up -d
+
+# 7. 起動確認
+docker logs kueli-app -f
+```
+
+#### ロールバック（問題発生時）
+
+```bash
+# アプリを停止
+docker compose -f docker-compose.production.yml down
+
+# バックアップから復元
+rm -rf data/
+tar -xzf backup-YYYYMMDD-HHMMSS.tar.gz
+
+# 前のバージョンに戻す
+git checkout <前のcommit hash>
+
+# 再ビルドして起動
+docker compose -f docker-compose.production.yml up -d --build
 ```
 
 ## 🛠 開発環境

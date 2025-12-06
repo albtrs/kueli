@@ -13,17 +13,29 @@ export const defaultSession: SessionData = {
   isLoggedIn: false
 }
 
-if (!process.env.SESSION_SECRET) {
-  throw new Error("SESSION_SECRET environment variable is required")
-}
+/**
+ * セッションオプションを取得する関数
+ * 遅延評価により、実際にセッションを使用する時点で SESSION_SECRET を検証
+ * これによりビルド時は評価されず、実行時のみ環境変数が必要になる
+ */
+export function getSessionOptions(): SessionOptions {
+  const secret = process.env.SESSION_SECRET
+  if (!secret) {
+    throw new Error("SESSION_SECRET environment variable is required")
+  }
+  
+  if (secret.length < 32) {
+    throw new Error("SESSION_SECRET must be at least 32 characters long")
+  }
 
-export const sessionOptions: SessionOptions = {
-  password: process.env.SESSION_SECRET,
-  cookieName: "kueli-session",
-  cookieOptions: {
-    secure: process.env.NODE_ENV === "production",
-    httpOnly: true,
-    sameSite: "strict", // CSRF対策を強化
-    maxAge: 60 * 60 * 24 * 7, // 7日間（30日から短縮）
-  },
+  return {
+    password: secret,
+    cookieName: "kueli-session",
+    cookieOptions: {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      sameSite: "strict",
+      maxAge: 60 * 60 * 24 * 7, // 7日間
+    },
+  }
 }

@@ -3,7 +3,7 @@ import { getIronSession } from "iron-session"
 import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
 import { compare } from "bcryptjs"
-import { SessionData, sessionOptions } from "@/lib/session"
+import { SessionData, getSessionOptions } from "@/lib/session"
 import { checkRateLimit, getClientIP } from "@/lib/security"
 
 // ログイン試行のレート制限: 5回/分
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     }
 
     const cookieStore = await cookies()
-    const session = await getIronSession<SessionData>(cookieStore, sessionOptions)
+    const session = await getIronSession<SessionData>(cookieStore, getSessionOptions())
 
     session.user = {
       id: user.id,
