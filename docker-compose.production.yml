@@ -4,8 +4,8 @@ services:
       context: .
       dockerfile: Dockerfile.production
     container_name: kueli-app
-    ports:
-      - "3001:3000"
+    expose:
+      - 3000
     volumes:
       # データ永続化のみマウント（コードはイメージに含まれる）
       - ./data/uploads:/app/public/uploads
@@ -29,7 +29,6 @@ services:
     # リバプロで使用するネットワークに接続
     networks:
       - apps_net
-
 networks:
   apps_net:
     external: true
