@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Kueli 本番環境セットアップスクリプト
 set -e
 
@@ -43,9 +43,13 @@ done
 echo ""
 echo "👤 管理者ユーザーを作成します"
 echo ""
-read -p "ユーザー名 (デフォルト: admin): " USERNAME
+printf "ユーザー名 (デフォルト: admin): "
+read USERNAME
 USERNAME=${USERNAME:-admin}
-read -s -p "パスワード (デフォルト: password123456): " PASSWORD
+printf "パスワード (デフォルト: password123456): "
+stty -echo 2>/dev/null || true
+read PASSWORD
+stty echo 2>/dev/null || true
 PASSWORD=${PASSWORD:-password123456}
 echo ""
 
