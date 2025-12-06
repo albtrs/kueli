@@ -26,19 +26,24 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
   
-  // 公開パスは認証不要
-  if (PUBLIC_PATHS.some(path => pathname === path || pathname.startsWith(path + '/'))) {
-    return NextResponse.next()
-  }
-  
   // セッションを確認
   const response = NextResponse.next()
   
   try {
-    // iron-sessionのセッションを取得
     const session = await getIronSession<SessionData>(request, response, getSessionOptions())
+    const isLoggedIn = session.isLoggedIn && session.user
     
-    if (!session.isLoggedIn || !session.user) {
+    // ログイン済みユーザーが/loginにアクセスした場合はホームへリダイレクト
+    if (isLoggedIn && pathname === '/login') {
+      return NextResponse.redirect(new URL('/', request.url))
+    }
+    
+    // 公開パスは認証不要
+    if (PUBLIC_PATHS.some(path => pathname === path || pathname.startsWith(path + '/'))) {
+      return response
+    }
+    
+    if (!isLoggedIn) {
       // 未認証の場合
       
       // APIリクエストの場合は401を返す
