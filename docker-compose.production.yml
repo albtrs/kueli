@@ -15,8 +15,6 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/prisma/db/app.db
       - SESSION_SECRET=${SESSION_SECRET}
-      - ADMIN_USER=${ADMIN_USER:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
     restart: unless-stopped
     # ヘルスチェック
     healthcheck:

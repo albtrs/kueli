@@ -25,38 +25,44 @@
 
 ## 🚀 本番デプロイ
 
+### 1. クローンして環境変数を設定
+
 ```bash
 git clone https://github.com/albtrs/kueli.git
 cd kueli
 
-# .env作成
+# .env作成（SESSION_SECRETは32文字以上）
 cat > .env << 'EOF'
 SESSION_SECRET="your-secret-key-at-least-32-characters-long"
-ADMIN_USER=admin
-ADMIN_PASSWORD=yourpassword
 EOF
+```
 
-# 起動
+### 2. 起動
+
+```bash
 docker compose -f docker-compose.production.yml up -d --build
 ```
 
-http://localhost:3001 にアクセス
+### 3. 初回セットアップ（DBマイグレーション＆管理者作成）
+
+```bash
+docker exec -it kueli npx prisma migrate deploy
+docker exec -it kueli node scripts/user-manage.js create admin yourpassword --admin
+```
+
+http://localhost:3000 にアクセス（nginxでリバプロ推奨）
 
 ### 管理
 
 ```bash
 # ログ
-docker logs kueli-app -f
+docker logs kueli -f
 
 # 再起動
 docker compose -f docker-compose.production.yml restart
 
 # 停止
 docker compose -f docker-compose.production.yml down
-
-# パスワード変更等
-docker exec -it kueli-app sh
-# → npm run user:password admin newpassword
 ```
 
 ### アップデート
@@ -68,6 +74,7 @@ tar -czf backup-$(date +%Y%m%d).tar.gz data/
 # 更新
 git pull
 docker compose -f docker-compose.production.yml up -d --build
+docker exec -it kueli npx prisma migrate deploy  # スキーマ変更時のみ
 ```
 
 ## 🛠 開発環境
@@ -186,9 +193,7 @@ tar -czf backup-$(date +%Y%m%d).tar.gz data/
 
 | 変数名 | 説明 |
 |--------|------|
-| `SESSION_SECRET` | セッション暗号化キー（32文字以上） |
-| `ADMIN_USER` | 初期管理者ユーザー名 |
-| `ADMIN_PASSWORD` | 初期管理者パスワード |
+| `SESSION_SECRET` | セッション暗号化キー（32文字以上、必須） |
 
 ## 📝 ライセンス
 

@@ -23,6 +23,9 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
+# ユーザー管理スクリプトをコンパイル
+RUN npx tsc scripts/user-manage.ts --outDir scripts --esModuleInterop --skipLibCheck
+
 # 本番用ステージ
 FROM base AS runner
 WORKDIR /app
@@ -43,16 +46,16 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules/@prisma/engines ./node_modules/@prisma/engines
 
-# bcryptjs（ユーザー作成用）
+# ユーザー管理スクリプト
 COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
-
-# 起動スクリプト
-COPY --from=builder /app/scripts/entrypoint.sh ./entrypoint.sh
+COPY --from=builder /app/scripts/user-manage.js ./scripts/user-manage.js
+COPY --from=builder /app/package.json ./package.json
 
 # uploadsディレクトリの権限設定
 RUN mkdir -p /app/public/uploads /app/prisma/db
-RUN chmod +x /app/entrypoint.sh
 RUN chown -R nextjs:nodejs /app
 
 USER nextjs
@@ -62,4 +65,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["sh", "/app/entrypoint.sh"]
+CMD ["node", "server.js"]
