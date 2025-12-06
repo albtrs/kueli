@@ -44,12 +44,15 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
-# ユーザー管理スクリプト用の依存関係
-COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/package.json ./package.json
+# bcryptjs（ユーザー作成用）
+COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
+
+# 起動スクリプト
+COPY --from=builder /app/scripts/entrypoint.sh ./entrypoint.sh
 
 # uploadsディレクトリの権限設定
 RUN mkdir -p /app/public/uploads /app/prisma/db
+RUN chmod +x /app/entrypoint.sh
 RUN chown -R nextjs:nodejs /app
 
 USER nextjs
@@ -58,5 +61,7 @@ EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+
+CMD ["sh", "/app/entrypoint.sh"]
 
 CMD ["node", "server.js"]

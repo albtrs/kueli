@@ -23,38 +23,29 @@
 | Auth | iron-session |
 | Runtime | Node.js 22, Docker |
 
-## 🚀 本番環境デプロイ（推奨）
+## 🚀 本番デプロイ
 
 ```bash
-# リポジトリをクローン
 git clone https://github.com/albtrs/kueli.git
 cd kueli
 
-# セットアップスクリプトを実行（自動でビルド・起動・ユーザー作成）
-./setup-production.sh
+# .env作成
+cat > .env << 'EOF'
+SESSION_SECRET="your-secret-key-at-least-32-characters-long"
+ADMIN_USER=admin
+ADMIN_PASSWORD=yourpassword
+EOF
 
-# ブラウザでアクセス
-# http://localhost:3001
-```
-
-### 手動セットアップ
-
-```bash
-# .envファイル作成
-echo 'SESSION_SECRET="your-secure-random-string-at-least-32-chars"' > .env
-
-# 本番用イメージをビルド＆起動
+# 起動
 docker compose -f docker-compose.production.yml up -d --build
-
-# データベース初期化
-# 管理コンテナでDB初期化＆ユーザー作成
-docker compose -f docker-compose.production.yml run --rm admin sh -c "npx prisma db push && npx tsx scripts/user-manage.ts reset admin yourpassword"
 ```
 
-### 本番環境の管理
+http://localhost:3001 にアクセス
+
+### 管理
 
 ```bash
-# ログ確認
+# ログ
 docker logs kueli-app -f
 
 # 再起動
@@ -63,69 +54,19 @@ docker compose -f docker-compose.production.yml restart
 # 停止
 docker compose -f docker-compose.production.yml down
 
-# ユーザー管理（管理コンテナを起動）
-docker compose -f docker-compose.production.yml run --rm admin sh
-# コンテナ内で npm run user:list 等を実行
+# パスワード変更等
+docker exec -it kueli-app sh
+# → npm run user:password admin newpassword
 ```
 
-### 🔄 アップデート手順
-
-#### コードのみ更新（スキーマ変更なし）
+### アップデート
 
 ```bash
-cd kueli
+# バックアップ
+tar -czf backup-$(date +%Y%m%d).tar.gz data/
 
-# 最新コードを取得
-git pull origin main
-
-# イメージを再ビルドして再起動
-docker compose -f docker-compose.production.yml up -d --build
-
-# 起動確認
-docker logs kueli-app -f
-```
-
-#### DBスキーマ変更を含む更新
-
-```bash
-cd kueli
-
-# 1. アプリを停止
-docker compose -f docker-compose.production.yml down
-
-# 2. データをバックアップ（重要）
-tar -czf backup-$(date +%Y%m%d-%H%M%S).tar.gz data/
-
-# 3. 最新コードを取得
-git pull origin main
-
-# 4. イメージを再ビルド
-docker compose -f docker-compose.production.yml build
-
-# 5. DBマイグレーションを実行
-docker compose -f docker-compose.production.yml run --rm admin sh -c "npx prisma db push"
-
-# 6. アプリを起動
-docker compose -f docker-compose.production.yml up -d
-
-# 7. 起動確認
-docker logs kueli-app -f
-```
-
-#### ロールバック（問題発生時）
-
-```bash
-# アプリを停止
-docker compose -f docker-compose.production.yml down
-
-# バックアップから復元
-rm -rf data/
-tar -xzf backup-YYYYMMDD-HHMMSS.tar.gz
-
-# 前のバージョンに戻す
-git checkout <前のcommit hash>
-
-# 再ビルドして起動
+# 更新
+git pull
 docker compose -f docker-compose.production.yml up -d --build
 ```
 
@@ -201,7 +142,6 @@ kueli/
 ├── docker-compose.production.yml # 本番環境用
 ├── Dockerfile                    # 開発用
 ├── Dockerfile.production         # 本番用（マルチステージビルド）
-├── setup-production.sh           # 本番セットアップスクリプト
 └── README.md
 ```
 
@@ -244,11 +184,11 @@ tar -czf backup-$(date +%Y%m%d).tar.gz data/
 
 ## 🔐 環境変数
 
-| 変数名 | 説明 | 設定場所 |
-|--------|------|----------|
-| `SESSION_SECRET` | セッション暗号化キー（32文字以上） | `.env` |
-| `DATABASE_URL` | SQLiteファイルパス | `docker-compose.yml` |
-| `NODE_ENV` | 実行環境 | `docker-compose.yml` |
+| 変数名 | 説明 |
+|--------|------|
+| `SESSION_SECRET` | セッション暗号化キー（32文字以上） |
+| `ADMIN_USER` | 初期管理者ユーザー名 |
+| `ADMIN_PASSWORD` | 初期管理者パスワード |
 
 ## 📝 ライセンス
 

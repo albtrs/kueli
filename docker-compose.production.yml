@@ -15,6 +15,8 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/prisma/db/app.db
       - SESSION_SECRET=${SESSION_SECRET}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
     restart: unless-stopped
     # ヘルスチェック
     healthcheck:
@@ -23,19 +25,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  # ユーザー管理用（必要時のみ起動）
-  admin:
-    image: node:22-alpine
-    container_name: kueli-admin
-    working_dir: /app
-    profiles:
-      - admin
-    volumes:
-      - ./app:/app
-      - ./data/prisma:/app/prisma/db
-    environment:
-      - DATABASE_URL=file:/app/prisma/db/app.db
-    command: sh -c "npm install --silent && npx prisma generate && sh"
-    stdin_open: true
-    tty: true
