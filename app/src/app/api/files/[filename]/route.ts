@@ -32,13 +32,12 @@ export async function GET(
     // MIMEタイプを判定
     const ext = filename.split('.').pop()?.toLowerCase();
     const mimeTypes: Record<string, string> = {
-      // 画像
+      // 画像（SVGはXSSリスクがあるため除外）
       jpg: 'image/jpeg',
       jpeg: 'image/jpeg',
       png: 'image/png',
       gif: 'image/gif',
       webp: 'image/webp',
-      svg: 'image/svg+xml',
       // 文書
       pdf: 'application/pdf',
       txt: 'text/plain',
@@ -57,13 +56,20 @@ export async function GET(
     };
     const mimeType = mimeTypes[ext || ''] || 'application/octet-stream';
 
+    // セキュリティヘッダー
+    const headers: Record<string, string> = {
+      'Content-Type': mimeType,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'X-Content-Type-Options': 'nosniff',
+    };
+
+    // 安全でないファイルタイプ（SVG等）は強制ダウンロード
+    if (ext === 'svg' || mimeType === 'application/octet-stream') {
+      headers['Content-Disposition'] = `attachment; filename="${filename}"`;
+    }
+
     // レスポンスを返す
-    return new NextResponse(fileBuffer, {
-      headers: {
-        'Content-Type': mimeType,
-        'Cache-Control': 'public, max-age=31536000, immutable',
-      },
-    });
+    return new NextResponse(fileBuffer, { headers });
   } catch (error: any) {
     if (error.code === 'ENOENT') {
       const notFoundError = new NotFoundError('File not found');

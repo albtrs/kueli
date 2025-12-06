@@ -4,9 +4,35 @@ import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
 import { compare } from "bcryptjs"
 import { SessionData, sessionOptions } from "@/lib/session"
+import { checkRateLimit, getClientIP } from "@/lib/security"
+
+// ログイン試行のレート制限: 5回/分
+const LOGIN_RATE_LIMIT = 5
+const LOGIN_RATE_WINDOW = 60 * 1000 // 1分
 
 export async function POST(request: NextRequest) {
   try {
+    // レート制限チェック
+    const clientIP = getClientIP(request)
+    const rateLimit = checkRateLimit(
+      `login:${clientIP}`,
+      LOGIN_RATE_LIMIT,
+      LOGIN_RATE_WINDOW
+    )
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Too many login attempts. Please try again later." },
+        { 
+          status: 429,
+          headers: {
+            'Retry-After': Math.ceil(rateLimit.resetIn / 1000).toString(),
+            'X-RateLimit-Remaining': '0',
+          }
+        }
+      )
+    }
+
     const { username, password } = await request.json()
 
     if (!username || !password) {

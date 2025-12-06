@@ -1,0 +1,5 @@
+# Kueli - Private Note-Taking App
+# すべての検索エンジンのクロールを拒否
+
+User-agent: *
+Disallow: /

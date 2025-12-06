@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { isValidExternalUrl } from '@/lib/security';
 
 interface OGPData {
   title?: string;
@@ -19,6 +20,15 @@ export async function GET(request: NextRequest) {
   const url = request.nextUrl.searchParams.get('url');
   if (!url) {
     return NextResponse.json({ error: 'URL is required' }, { status: 400 });
+  }
+
+  // SSRF対策: 内部ネットワークへのアクセスをブロック
+  const urlValidation = isValidExternalUrl(url);
+  if (!urlValidation.valid) {
+    return NextResponse.json(
+      { error: urlValidation.reason || 'Invalid URL' },
+      { status: 400 }
+    );
   }
 
   try {

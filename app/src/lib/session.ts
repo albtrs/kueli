@@ -23,14 +23,7 @@ export const sessionOptions: SessionOptions = {
   cookieOptions: {
     secure: process.env.NODE_ENV === "production",
     httpOnly: true,
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30, // 30 days
+    sameSite: "strict", // CSRF対策を強化
+    maxAge: 60 * 60 * 24 * 7, // 7日間（30日から短縮）
   },
-}
-
-// API Key認証のための型定義（将来の拡張用）
-export interface ApiKeyData {
-  userId: string
-  keyId: string
-  scopes: string[]
 }
