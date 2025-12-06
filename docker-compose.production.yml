@@ -1,5 +1,5 @@
 services:
-  app:
+  kueli:
     build:
       context: .
       dockerfile: Dockerfile.production
