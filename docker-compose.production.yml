@@ -32,4 +32,4 @@ services:
 
 networks:
   apps_net:
-    external: truek
+    external: true
