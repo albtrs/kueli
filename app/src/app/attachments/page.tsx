@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSession } from '@/hooks/useSession';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout';
@@ -69,7 +69,7 @@ function StatusBadge({ status, inCurrent, inHistory }: { status: FileUsageStatus
   );
 }
 
-export default function AttachmentsPage() {
+function AttachmentsPageContent() {
   const router = useRouter();
   const { status } = useSession();
   
@@ -343,5 +343,17 @@ export default function AttachmentsPage() {
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function AttachmentsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    }>
+      <AttachmentsPageContent />
+    </Suspense>
   );
 }

@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactCompiler: true,
   
+  // 本番用: standaloneモードで出力（Dockerに最適化）
+  output: 'standalone',
+  
   // Turbopack設定（空でもOK、警告を消すため）
   turbopack: {},
   

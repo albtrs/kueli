@@ -98,8 +98,15 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(ogpData);
-  } catch (error) {
-    console.error('OGP fetch error:', error);
+  } catch (error: unknown) {
+    // ネットワークエラーの詳細をログに出さない（本番環境のノイズ軽減）
+    const isNetworkError = error instanceof Error && 
+      ('code' in error || error.message.includes('fetch failed'));
+    
+    if (!isNetworkError && process.env.NODE_ENV !== 'production') {
+      console.error('OGP fetch error:', error);
+    }
+    
     return NextResponse.json({ error: 'Failed to fetch OGP data' }, { status: 500 });
   }
 }

@@ -23,16 +23,58 @@
 | Auth | iron-session |
 | Runtime | Node.js 22, Docker |
 
-## 🚀 クイックスタート
+## 🚀 本番環境デプロイ（推奨）
 
 ```bash
-# リポジトリ移動
-cd /path/to/kueli
+# リポジトリをクローン
+git clone https://github.com/albtrs/kueli.git
+cd kueli
 
-# .envファイル作成（SESSION_SECRETを設定）
+# セットアップスクリプトを実行（自動でビルド・起動・ユーザー作成）
+./setup-production.sh
+
+# ブラウザでアクセス
+# http://localhost:3001
+```
+
+### 手動セットアップ
+
+```bash
+# .envファイル作成
 echo 'SESSION_SECRET="your-secure-random-string-at-least-32-chars"' > .env
 
-# サービス起動
+# 本番用イメージをビルド＆起動
+docker compose -f docker-compose.production.yml up -d --build
+
+# データベース初期化
+# 管理コンテナでDB初期化＆ユーザー作成
+docker compose -f docker-compose.production.yml run --rm admin sh -c "npx prisma db push && npx tsx scripts/user-manage.ts reset admin yourpassword"
+```
+
+### 本番環境の管理
+
+```bash
+# ログ確認
+docker logs kueli-app -f
+
+# 再起動
+docker compose -f docker-compose.production.yml restart
+
+# 停止
+docker compose -f docker-compose.production.yml down
+
+# アップデート（再ビルド）
+docker compose -f docker-compose.production.yml up -d --build
+
+# ユーザー管理（管理コンテナを起動）
+docker compose -f docker-compose.production.yml run --rm admin sh
+# コンテナ内で npm run user:list 等を実行
+```
+
+## 🛠 開発環境
+
+```bash
+# 開発用docker-composeを起動
 docker compose up -d
 
 # コンテナに入る
@@ -42,7 +84,7 @@ docker exec -it kueli-app sh
 npm install
 npx prisma generate
 npx prisma db push
-npm run user:reset admin yourpassword  # 管理者ユーザー作成
+npm run user:reset admin yourpassword
 npm run dev
 
 # ブラウザでアクセス
@@ -97,7 +139,11 @@ kueli/
 │   └── uploads/          # ユーザー画像
 ├── docs/                 # ドキュメント
 ├── .env                  # 環境変数（Git管理外）
-├── docker-compose.yml
+├── docker-compose.yml            # 開発環境用
+├── docker-compose.production.yml # 本番環境用
+├── Dockerfile                    # 開発用
+├── Dockerfile.production         # 本番用（マルチステージビルド）
+├── setup-production.sh           # 本番セットアップスクリプト
 └── README.md
 ```
 
