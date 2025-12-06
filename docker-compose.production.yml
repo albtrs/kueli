@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.production
-    container_name: kueli-app
+    container_name: kueli
     expose:
       - 3000
     volumes:
