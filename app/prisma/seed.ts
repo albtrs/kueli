@@ -2,43 +2,19 @@ import { prisma } from '../src/lib/prisma';
 import { hash } from 'bcryptjs';
 
 async function main() {
-  // Create test user
-  const hashedPassword = await hash('password123456', 10);
-  
-  const user = await prisma.user.upsert({
-    where: { email: 'user@example.com' },
-    update: {},
-    create: {
-      email: 'user@example.com',
-      password: hashedPassword,
-      name: 'Test User',
-    },
-  });
+  // Userテーブルだけ全削除
+  await prisma.user.deleteMany({});
 
-  console.log('Created user:', user);
-
-  // Create sample notes
-  const note1 = await prisma.note.create({
+  // 新しいadminユーザーを作成
+  const passwordHash = await hash('password123456', 10);
+  const user = await prisma.user.create({
     data: {
-      title: 'ウェルカムメモ',
-      content: '# ようこそ！\n\nこれは **Markdown** エディタです。\n\n#test #welcome',
-      tags: JSON.stringify(['test', 'welcome']),
-      images: JSON.stringify([]),
-      isPinned: true,
+      username: 'admin',
+      passwordHash,
+      isAdmin: true,
     },
   });
-
-  const note2 = await prisma.note.create({
-    data: {
-      title: 'タスクリスト',
-      content: '## 今日やること\n\n- [ ] 買い物\n- [ ] 掃除\n- [x] 完了したタスク\n\n#todo',
-      tags: JSON.stringify(['todo']),
-      images: JSON.stringify([]),
-      isPinned: false,
-    },
-  });
-
-  console.log('Created notes:', { note1, note2 });
+  console.log('Created admin user:', user);
 }
 
 main()

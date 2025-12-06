@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/hooks/useSession';
 import { fetchNotes } from '@/actions/note';
 import { Tag } from 'lucide-react';
 

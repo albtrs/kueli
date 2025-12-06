@@ -3,16 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --turbo",
+    "build": "NODE_ENV=production next build --turbo",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "user:list": "npx tsx scripts/user-manage.ts list",
+    "user:create": "npx tsx scripts/user-manage.ts create",
+    "user:password": "npx tsx scripts/user-manage.ts update-password",
+    "user:delete": "npx tsx scripts/user-manage.ts delete",
+    "user:reset": "npx tsx scripts/user-manage.ts reset"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@auth/prisma-adapter": "^2.7.4",
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/language-data": "^6.5.2",
     "@prisma/client": "^6.1.0",
@@ -29,10 +33,10 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "github-markdown-css": "^5.8.1",
+    "iron-session": "^8.0.4",
     "jszip": "^3.10.1",
     "lucide-react": "^0.555.0",
     "next": "16.0.6",
-    "next-auth": "^4.24.11",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-markdown": "^10.1.0",

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { logout } from '@/hooks/useSession';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { LogOut, X, Search, Plus } from 'lucide-react';
@@ -16,8 +16,7 @@ export function DashboardHeader() {
   const [searchQuery, setSearchQuery] = useState(currentQuery);
 
   const handleLogout = async () => {
-    await signOut({ redirect: false });
-    router.push('/login');
+    await logout();
   };
 
   const handleSearch = (e: React.FormEvent) => {

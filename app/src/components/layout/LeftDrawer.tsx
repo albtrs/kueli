@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { logout } from '@/hooks/useSession';
 import { Button } from '@/components/ui/button';
 import { LogOut, Paperclip, X, Archive, Home, Settings } from 'lucide-react';
 
@@ -14,9 +14,8 @@ export function LeftDrawer({ isOpen, onClose }: LeftDrawerProps) {
   const router = useRouter();
 
   const handleLogout = async () => {
-    await signOut({ redirect: false });
-    router.push('/login');
     onClose();
+    await logout();
   };
 
   const handleNavigate = (path: string) => {

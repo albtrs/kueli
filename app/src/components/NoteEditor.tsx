@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/hooks/useSession';
 import dynamic from 'next/dynamic';
 import { fetchNote, fetchNotes, deleteNote } from '@/actions/note';
 import { Note } from '@/lib/types';

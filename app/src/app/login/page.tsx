@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signIn } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,7 +16,7 @@ import { Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -28,24 +27,28 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
       });
 
-      if (result?.error) {
-        setError('メールアドレスまたはパスワードが正しくありません');
+      if (!response.ok) {
+        setError('ユーザー名またはパスワードが正しくありません');
       } else {
         router.push('/');
+        router.refresh();
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Login error:', err);
       setError('ログインに失敗しました');
     } finally {
       setIsLoading(false);
     }
   };
+
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4 bg-muted/30">
@@ -59,13 +62,13 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-xs">メールアドレス</Label>
+              <Label htmlFor="username" className="text-xs">ユーザー名</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="user@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="username"
+                type="text"
+                placeholder="admin"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 required
                 disabled={isLoading}
                 className="h-9"
