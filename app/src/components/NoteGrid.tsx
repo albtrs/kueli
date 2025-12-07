@@ -27,6 +27,8 @@ interface NoteGridProps {
   tag?: string;
   search?: string;
   includeArchived?: boolean;
+  excludePinned?: boolean;
+  sortOrder?: 'desc' | 'asc';
   // 親コンポーネントへのコールバック（ピン留めセクション連動用）
   onNoteUpdate?: (note: Note) => void;
   onNoteDelete?: (noteId: string) => void;
@@ -42,6 +44,8 @@ export function NoteGrid({
   tag,
   search,
   includeArchived = false,
+  excludePinned = false,
+  sortOrder = 'desc',
   onNoteUpdate,
   onNoteDelete,
   onNoteArchive,
@@ -65,7 +69,7 @@ export function NoteGrid({
     
     setIsLoading(true);
     try {
-      const result = await fetchNotesPage(cursor, 20, tag, search, includeArchived);
+      const result = await fetchNotesPage(cursor, 20, tag, search, includeArchived, excludePinned, sortOrder);
       setDisplayNotes(prev => [...prev, ...result.notes]);
       setCursor(result.nextCursor);
       setHasMore(result.hasMore);
@@ -74,7 +78,7 @@ export function NoteGrid({
     } finally {
       setIsLoading(false);
     }
-  }, [isInfiniteMode, isLoading, hasMore, cursor, tag, search, includeArchived]);
+  }, [isInfiniteMode, isLoading, hasMore, cursor, tag, search, includeArchived, excludePinned, sortOrder]);
   
   // Intersection Observer で自動読み込み
   useEffect(() => {

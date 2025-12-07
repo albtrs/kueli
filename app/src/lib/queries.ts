@@ -38,13 +38,17 @@ function parseNote(dbNote: any): Note {
  * @param tag - タグでフィルタ（オプション）
  * @param search - 検索クエリ（オプション）
  * @param includeArchived - アーカイブ済みを含める（デフォルトfalse）
+ * @param excludePinned - ピン留めを除外する（デフォルトfalse）
+ * @param sortOrder - ソート順（'desc' | 'asc'、デフォルト'desc'）
  */
 export async function getNotesPage(
   cursor: string | null = null,
   limit: number = DEFAULT_PAGE_SIZE,
   tag?: string,
   search?: string,
-  includeArchived: boolean = false
+  includeArchived: boolean = false,
+  excludePinned: boolean = false,
+  sortOrder: 'desc' | 'asc' = 'desc'
 ): Promise<NotesPage> {
   const session = await auth()
   if (!session?.user) {
@@ -60,6 +64,11 @@ export async function getNotesPage(
   // アーカイブフィルタ（デフォルトでアーカイブを除外）
   if (!includeArchived) {
     baseWhere.isArchived = false
+  }
+  
+  // ピン留め除外フィルタ
+  if (excludePinned) {
+    baseWhere.isPinned = false
   }
   
   if (tag) {
@@ -79,7 +88,7 @@ export async function getNotesPage(
 
   const notes = await prisma.note.findMany({
     where,
-    orderBy: { updatedAt: 'desc' },
+    orderBy: { updatedAt: sortOrder },
     take,
     ...(cursor && {
       skip: 1, // カーソル自体はスキップ

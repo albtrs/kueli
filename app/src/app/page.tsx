@@ -8,7 +8,7 @@ import { NoteDashboard } from '@/components/NoteDashboard';
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
-  searchParams: Promise<{ tag?: string; q?: string }>;
+  searchParams: Promise<{ tag?: string; q?: string; sort?: string }>;
 }
 
 export default async function DashboardPage({ searchParams }: PageProps) {
@@ -22,31 +22,28 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const selectedTag = params.tag;
   const searchQuery = params.q;
+  const sortOrder = (params.sort === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc';
+  
+  // 検索モードかどうか（タグ選択またはキーワード検索がある場合）
+  const isSearchMode = !!(selectedTag || searchQuery);
 
-  // ピン留めノートは全件取得後、フィルタを適用（アーカイブは除外）
-  const allNotes = await getNotes(false);
-  let pinnedNotes = allNotes.filter((note) => note.isPinned);
-  
-  // タグフィルタを適用
-  if (selectedTag) {
-    if (selectedTag === '__untagged__') {
-      pinnedNotes = pinnedNotes.filter(note => !note.tags || note.tags.length === 0);
-    } else {
-      pinnedNotes = pinnedNotes.filter(note => note.tags?.includes(selectedTag));
-    }
+  // 検索モードでない場合のみピン留めセクションを表示
+  let pinnedNotes: Awaited<ReturnType<typeof getNotes>> = [];
+  if (!isSearchMode) {
+    const allNotes = await getNotes(false);
+    pinnedNotes = allNotes.filter((note) => note.isPinned);
   }
   
-  // 検索フィルタを適用
-  if (searchQuery) {
-    const query = searchQuery.toLowerCase();
-    pinnedNotes = pinnedNotes.filter(note => 
-      note.title?.toLowerCase().includes(query) || 
-      note.content?.toLowerCase().includes(query)
-    );
-  }
-  
-  // 最近のノートはページネーションで取得（初期20件、アーカイブ除外）
-  const initialPage = await getNotesPage(null, 20, selectedTag, searchQuery, false);
+  // ノート取得（検索モードではピン留め含む全件、通常モードではピン留め除外）
+  const initialPage = await getNotesPage(
+    null, 
+    20, 
+    selectedTag, 
+    searchQuery, 
+    false, 
+    !isSearchMode, // 検索モードではピン留めも含める
+    sortOrder
+  );
 
   return (
     <DashboardLayout>
@@ -59,6 +56,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             initialHasMore={initialPage.hasMore}
             tag={selectedTag}
             search={searchQuery}
+            sortOrder={sortOrder}
+            isSearchMode={isSearchMode}
           />
         </div>
       </div>
