@@ -8,11 +8,11 @@ import { DesktopSidebar } from './DesktopSidebar';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
-  /** サイドバーを非表示にするモード（エディタ等） */
-  hideSidebar?: boolean;
+  /** サイドバーを表示するモード（ダッシュボード用） */
+  showSidebar?: boolean;
 }
 
-export function DashboardLayout({ children, hideSidebar = false }: DashboardLayoutProps) {
+export function DashboardLayout({ children, showSidebar = false }: DashboardLayoutProps) {
   const [isLeftDrawerOpen, setIsLeftDrawerOpen] = useState(false);
   const [isRightDrawerOpen, setIsRightDrawerOpen] = useState(false);
 
@@ -24,15 +24,17 @@ export function DashboardLayout({ children, hideSidebar = false }: DashboardLayo
         onOpenRightDrawer={() => setIsRightDrawerOpen(true)}
       />
 
-      {/* メインエリア */}
-      <div className="flex flex-1">
-        {/* PC用サイドバー（hideSidebarモードでは非表示） */}
-        {!hideSidebar && <DesktopSidebar />}
+      {/* メインエリア - 画面全体の中央に配置 */}
+      <div className="flex-1 flex justify-center">
+        <div className={`w-full ${showSidebar ? 'max-w-7xl' : 'max-w-6xl'} flex`}>
+          {/* PC用サイドバー（showSidebarモードでのみ表示） */}
+          {showSidebar && <DesktopSidebar />}
 
-        {/* コンテンツエリア */}
-        <main className={`flex-1 ${hideSidebar ? 'overflow-hidden' : ''}`}>
-          {children}
-        </main>
+          {/* コンテンツエリア */}
+          <main className="flex-1 min-w-0">
+            {children}
+          </main>
+        </div>
       </div>
 
       {/* モバイル用ドロワー */}

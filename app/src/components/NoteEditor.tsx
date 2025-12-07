@@ -317,7 +317,7 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
   // ローディング中
   if (isLoading || status === 'loading') {
     return (
-      <DashboardLayout hideSidebar>
+      <DashboardLayout>
         <div className="flex h-full items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
@@ -329,7 +329,7 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
   const isSaveDisabled = isNewMode && !createdNoteId && !content.trim();
 
   return (
-    <DashboardLayout hideSidebar>
+    <DashboardLayout>
       <div className="flex h-full overflow-hidden">
         {/* メインエディタエリア */}
         <div className="flex-1 flex flex-col h-full overflow-hidden px-4 pb-4 md:px-6">

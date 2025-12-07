@@ -76,8 +76,8 @@ export function DesktopSidebar() {
   };
 
   return (
-    <aside className="hidden md:block w-56 border-r bg-background shrink-0">
-      <div className="sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto p-3">
+    <aside className="hidden md:block w-48 shrink-0">
+      <div className="sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto p-3 pr-4">
         <div className="flex items-center gap-2 mb-3">
           <Tag className="h-4 w-4 text-muted-foreground" />
           <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
