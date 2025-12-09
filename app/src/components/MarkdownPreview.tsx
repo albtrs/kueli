@@ -206,7 +206,7 @@ export function MarkdownPreview({ content, permalinks, isFullSizeImages = false 
           alt={props.alt}
           imageIndex={index !== -1 ? index : undefined}
           onImageClick={index !== -1 ? handleImageClick : undefined}
-          isFullSize={isFullSizeImages}
+          isFullSizeImages={isFullSizeImages}
         />
       );
     },
@@ -246,7 +246,7 @@ export function MarkdownPreview({ content, permalinks, isFullSizeImages = false 
           >
             {children}
           </a>
-          {isExternal && <LinkPreview href={href} />}
+          {isExternal && <LinkPreview href={href} isFullSizeImages={isFullSizeImages} />}
         </>
       );
     },

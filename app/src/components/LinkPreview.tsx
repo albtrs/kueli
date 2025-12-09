@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Tweet } from 'react-tweet';
 import { ExternalLink, Loader2 } from 'lucide-react';
 import { extractYouTubeVideoId, extractTweetId } from '@/lib/media-utils';
+import { TweetCard } from '@/components/TweetCard';
 
 interface OGPData {
   title?: string;
@@ -15,6 +15,8 @@ interface OGPData {
 
 interface LinkPreviewProps {
   href: string;
+  /** 画像を原寸大で表示するか */
+  isFullSizeImages?: boolean;
 }
 
 // YouTubeプレビュー
@@ -35,12 +37,10 @@ function YouTubePreview({ videoId }: { videoId: string }) {
 }
 
 // X (Twitter) プレビュー
-function TweetPreview({ tweetId }: { tweetId: string }) {
+function TweetPreview({ tweetId, tweetUrl, isFullSizeImages }: { tweetId: string; tweetUrl: string; isFullSizeImages?: boolean }) {
   return (
-    <div className="mt-2 flex justify-center">
-      <div className="max-w-[550px] w-full">
-        <Tweet id={tweetId} />
-      </div>
+    <div className="mt-2">
+      <TweetCard tweetId={tweetId} tweetUrl={tweetUrl} isFullSizeImages={isFullSizeImages} />
     </div>
   );
 }
@@ -127,7 +127,7 @@ function OGPPreview({ href }: { href: string }) {
 }
 
 // メインのリンクプレビューコンポーネント
-export function LinkPreview({ href }: LinkPreviewProps) {
+export function LinkPreview({ href, isFullSizeImages }: LinkPreviewProps) {
   // URLかどうかチェック
   if (!href.startsWith('http://') && !href.startsWith('https://')) {
     return null;
@@ -142,7 +142,7 @@ export function LinkPreview({ href }: LinkPreviewProps) {
   // X (Twitter)
   const tweetId = extractTweetId(href);
   if (tweetId) {
-    return <TweetPreview tweetId={tweetId} />;
+    return <TweetPreview tweetId={tweetId} tweetUrl={href} isFullSizeImages={isFullSizeImages} />;
   }
 
   // OGPプレビュー
