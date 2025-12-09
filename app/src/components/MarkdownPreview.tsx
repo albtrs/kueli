@@ -206,7 +206,7 @@ export function MarkdownPreview({ content, permalinks, isFullSizeImages = false 
           alt={props.alt}
           imageIndex={index !== -1 ? index : undefined}
           onImageClick={index !== -1 ? handleImageClick : undefined}
-          isFullSizeImages={isFullSizeImages}
+          isFullSize={isFullSizeImages}
         />
       );
     },
