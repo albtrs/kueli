@@ -76,46 +76,44 @@ export function DesktopSidebar() {
   };
 
   return (
-    <aside className="hidden md:block w-48 shrink-0">
-      <div className="sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto p-3 pr-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Tag className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            タグ
-          </span>
-        </div>
-
-        {isLoading ? (
-          <div className="text-xs text-muted-foreground px-2">読み込み中...</div>
-        ) : tags.length === 0 ? (
-          <div className="text-xs text-muted-foreground px-2">タグはありません</div>
-        ) : (
-          <div className="space-y-0.5">
-            {tags.map(tag => (
-              <button
-                key={tag.id}
-                onClick={() => handleTagClick(tag.name)}
-                className={`flex items-center justify-between w-full px-2 py-1.5 rounded transition-colors text-left ${
-                  selectedTag === tag.name
-                    ? 'bg-primary text-primary-foreground'
-                    : 'hover:bg-muted'
-                }`}
-              >
-                <span className={`text-sm truncate ${tag.name === '__untagged__' ? 'italic text-muted-foreground' : ''}`}>
-                  {tag.name === '__untagged__' ? 'タグなし' : `#${tag.name}`}
-                </span>
-                <span className={`text-xs ${
-                  selectedTag === tag.name
-                    ? 'text-primary-foreground/70'
-                    : 'text-muted-foreground'
-                }`}>
-                  {tag.count}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
+    <aside className="h-full overflow-y-auto">
+      <div className="flex items-center gap-2 mb-3">
+        <Tag className="h-4 w-4 text-muted-foreground" />
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          タグ
+        </span>
       </div>
+
+      {isLoading ? (
+        <div className="text-xs text-muted-foreground px-2">読み込み中...</div>
+      ) : tags.length === 0 ? (
+        <div className="text-xs text-muted-foreground px-2">タグはありません</div>
+      ) : (
+        <div className="space-y-0.5">
+          {tags.map(tag => (
+            <button
+              key={tag.id}
+              onClick={() => handleTagClick(tag.name)}
+              className={`flex items-center justify-between w-full px-2 py-1.5 rounded transition-colors text-left ${
+                selectedTag === tag.name
+                  ? 'bg-primary text-primary-foreground'
+                  : 'hover:bg-muted'
+              }`}
+            >
+              <span className={`text-sm truncate ${tag.name === '__untagged__' ? 'italic text-muted-foreground' : ''}`}>
+                {tag.name === '__untagged__' ? 'タグなし' : `#${tag.name}`}
+              </span>
+              <span className={`text-xs ${
+                selectedTag === tag.name
+                  ? 'text-primary-foreground/70'
+                  : 'text-muted-foreground'
+              }`}>
+                {tag.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </aside>
   );
 }

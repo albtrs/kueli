@@ -8,6 +8,7 @@ import remarkWikiLink from 'remark-wiki-link';
 import { MediaRenderer } from './MediaRenderer';
 import { LinkPreview } from './LinkPreview';
 import { ImageGalleryModal, GalleryImage } from './ui/image-gallery-modal';
+import { generateSlug } from './TableOfContents';
 
 interface MarkdownPreviewProps {
   content: string;
@@ -91,28 +92,52 @@ export function MarkdownPreview({ content, permalinks, isFullSizeImages = false 
   // カスタムMarkdownレンダラー
   const markdownComponents: any = useMemo(() => ({
     // --- 見出し ---
-    h1: ({ children }: any) => (
-      <h1 className="text-2xl font-bold mt-6 mb-3 pb-2 border-b border-border">
-        {children}
-      </h1>
-    ),
-    h2: ({ children }: any) => (
-      <h2 className="text-xl font-semibold mt-5 mb-2 pb-1 border-b border-border/50">
-        {children}
-      </h2>
-    ),
-    h3: ({ children }: any) => (
-      <h3 className="text-lg font-medium mt-4 mb-2">{children}</h3>
-    ),
-    h4: ({ children }: any) => (
-      <h4 className="text-base font-medium mt-3 mb-1">{children}</h4>
-    ),
-    h5: ({ children }: any) => (
-      <h5 className="text-sm font-medium mt-2 mb-1">{children}</h5>
-    ),
-    h6: ({ children }: any) => (
-      <h6 className="text-sm font-medium mt-2 mb-1 text-muted-foreground">{children}</h6>
-    ),
+    h1: ({ children }: any) => {
+      const text = typeof children === 'string' ? children : String(children);
+      const id = generateSlug(text);
+      return (
+        <h1 id={id} className="text-2xl font-bold mt-6 mb-3 pb-2 border-b border-border scroll-mt-4">
+          {children}
+        </h1>
+      );
+    },
+    h2: ({ children }: any) => {
+      const text = typeof children === 'string' ? children : String(children);
+      const id = generateSlug(text);
+      return (
+        <h2 id={id} className="text-xl font-semibold mt-5 mb-2 pb-1 border-b border-border/50 scroll-mt-4">
+          {children}
+        </h2>
+      );
+    },
+    h3: ({ children }: any) => {
+      const text = typeof children === 'string' ? children : String(children);
+      const id = generateSlug(text);
+      return (
+        <h3 id={id} className="text-lg font-medium mt-4 mb-2 scroll-mt-4">{children}</h3>
+      );
+    },
+    h4: ({ children }: any) => {
+      const text = typeof children === 'string' ? children : String(children);
+      const id = generateSlug(text);
+      return (
+        <h4 id={id} className="text-base font-medium mt-3 mb-1 scroll-mt-4">{children}</h4>
+      );
+    },
+    h5: ({ children }: any) => {
+      const text = typeof children === 'string' ? children : String(children);
+      const id = generateSlug(text);
+      return (
+        <h5 id={id} className="text-sm font-medium mt-2 mb-1 scroll-mt-4">{children}</h5>
+      );
+    },
+    h6: ({ children }: any) => {
+      const text = typeof children === 'string' ? children : String(children);
+      const id = generateSlug(text);
+      return (
+        <h6 id={id} className="text-sm font-medium mt-2 mb-1 text-muted-foreground scroll-mt-4">{children}</h6>
+      );
+    },
 
     // --- 本文 ---
     p: ({ children }: any) => (

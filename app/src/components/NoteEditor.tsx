@@ -18,6 +18,7 @@ import {
   customHighlighters,
 } from '@/components/editor';
 import { DashboardLayout } from '@/components/layout';
+import { NoteInfoSidebar } from '@/components/NoteInfoSidebar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { EditorToolbar } from '@/components/EditorToolbar';
@@ -328,12 +329,20 @@ export function NoteEditor({ noteId, initialTitle }: NoteEditorProps) {
   const showDeleteButton = !isNewMode || createdNoteId;
   const isSaveDisabled = isNewMode && !createdNoteId && !content.trim();
 
+  // 右サイドバー（プレビュータブ時のみ表示）
+  const rightSidebar = activeTab === 'preview' ? (
+    <NoteInfoSidebar 
+      content={content}
+      noteId={currentNoteId || undefined}
+    />
+  ) : undefined;
+
   return (
-    <DashboardLayout>
+    <DashboardLayout rightSidebar={rightSidebar}>
       <div className="flex h-full overflow-hidden">
         {/* メインエディタエリア */}
-        <div className="flex-1 flex flex-col h-full overflow-hidden px-4 pb-4 md:px-6">
-          <div className="max-w-5xl mx-auto w-full h-full flex flex-col">
+        <div className="flex-1 flex flex-col h-full overflow-hidden pb-4">
+          <div className="w-full h-full flex flex-col">
             {/* タブ + アクションボタン */}
             <div className="flex items-center justify-between py-3 gap-2">
               {/* タブ切り替えボタン */}

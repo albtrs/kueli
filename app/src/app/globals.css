@@ -117,6 +117,10 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    /* スクロールバーの幅を常に確保し、コンテンツ量でレイアウトがズレるのを防ぐ */
+    scrollbar-gutter: stable;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-noto-sans-jp), var(--font-geist-sans), sans-serif;

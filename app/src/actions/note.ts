@@ -495,3 +495,58 @@ export async function duplicateNote(id: string): Promise<Note> {
     throw error
   }
 }
+
+/**
+ * 指定ノートへのバックリンク（WikiLinkでリンクしているノート）を取得
+ * @param noteId - 対象ノートのID
+ * @returns バックリンクしているノートの一覧
+ */
+export async function fetchBacklinks(noteId: string): Promise<Note[]> {
+  try {
+    const session = await auth()
+    if (!session?.user) {
+      throw new UnauthorizedError()
+    }
+
+    // まず対象ノートのタイトルを取得
+    const targetNote = await prisma.note.findUnique({
+      where: { id: noteId },
+      select: { title: true },
+    })
+
+    if (!targetNote) {
+      throw new NotFoundError('Note not found')
+    }
+
+    const title = targetNote.title
+
+    // タイトルが空の場合はバックリンクなし
+    if (!title.trim()) {
+      return []
+    }
+
+    // [[タイトル]] または [[タイトル|エイリアス]] を含むノートを検索
+    // SQLiteのLIKE検索で部分一致
+    const notes = await prisma.note.findMany({
+      where: {
+        id: { not: noteId }, // 自分自身を除外
+        isArchived: false,
+        content: {
+          contains: `[[${title}`,
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    })
+
+    // より厳密にフィルタリング（[[タイトル]] または [[タイトル|...]] の形式をチェック）
+    const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const wikiLinkRegex = new RegExp(`\\[\\[${escapedTitle}(\\|[^\\]]+)?\\]\\]`, 'i')
+
+    const filteredNotes = notes.filter(note => wikiLinkRegex.test(note.content))
+
+    return filteredNotes.map(parseNote)
+  } catch (error) {
+    console.error('fetchBacklinks error:', handleServerActionError(error))
+    throw error
+  }
+}

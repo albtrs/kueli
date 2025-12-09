@@ -42,10 +42,14 @@ export function AppHeader({ onOpenLeftDrawer, onOpenRightDrawer }: AppHeaderProp
   };
 
   return (
-    <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex justify-center">
-        <div className="flex h-14 items-center gap-2 px-4 w-full max-w-7xl">
-          {/* 左側：ハンバーガー + ロゴ */}
+    <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      {/* 5カラムグリッド: 余白|左ペイン(16rem)|メイン(62rem)|右ペイン(16rem)|余白 */}
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_16rem_62rem_16rem_1fr] h-14">
+        {/* 左余白 */}
+        <div className="hidden xl:block" />
+        
+        {/* 左ペイン - ハンバーガー + ロゴ */}
+        <div className="hidden xl:flex items-center px-4">
           <div className="flex items-center gap-2">
             {/* 左ドロワートグル（PC/モバイル共通） */}
             <Button
@@ -65,9 +69,27 @@ export function AppHeader({ onOpenLeftDrawer, onOpenRightDrawer }: AppHeaderProp
               <span>Kueli</span>
             </button>
           </div>
-          
-          {/* 中央：スペーサー */}
-          <div className="flex-1" />
+        </div>
+        
+        {/* メインエリア */}
+        <div className="flex items-center justify-between px-4 xl:justify-center">
+          {/* モバイル用：ハンバーガー + ロゴ */}
+          <div className="flex items-center gap-2 xl:hidden">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              onClick={onOpenLeftDrawer}
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            <button
+              onClick={() => router.push('/')}
+              className="flex items-center gap-2 font-semibold text-lg hover:opacity-80 transition-opacity"
+            >
+              <span>Kueli</span>
+            </button>
+          </div>
           
           {/* 新規ボタン + 検索バー */}
           <div className="flex items-center gap-2">
@@ -106,6 +128,12 @@ export function AppHeader({ onOpenLeftDrawer, onOpenRightDrawer }: AppHeaderProp
             </Button>
           </div>
         </div>
+        
+        {/* 右ペイン */}
+        <div className="hidden xl:block" />
+        
+        {/* 右余白 */}
+        <div className="hidden xl:block" />
       </div>
     </header>
   );
