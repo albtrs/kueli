@@ -306,20 +306,72 @@ const NOTE_SEARCH_FIELDS = ['title', 'content', 'tags'] as const;
 const NOTE_JSON_FIELDS = ['tags'] as const;
 
 /**
+ * LinkMetadata検索用の条件を生成
+ */
+function buildLinkMetadataCondition(parsed: ParsedQuery): Prisma.LinkMetadataWhereInput | null {
+  if (parsed.isEmpty || parsed.orGroups.length === 0) {
+    return null;
+  }
+
+  // 単一のANDグループの場合
+  if (parsed.orGroups.length === 1) {
+    const group = parsed.orGroups[0];
+    const conditions: Prisma.LinkMetadataWhereInput[] = [];
+
+    // includeキーワード: searchTextにすべて含む
+    for (const token of group.includes) {
+      conditions.push({ searchText: { contains: token.value } });
+    }
+
+    // excludeキーワード: searchTextに含まない
+    for (const token of group.excludes) {
+      conditions.push({ NOT: { searchText: { contains: token.value } } });
+    }
+
+    if (conditions.length === 0) return null;
+    if (conditions.length === 1) return conditions[0];
+    return { AND: conditions };
+  }
+
+  // 複数のORグループの場合
+  const orConditions: Prisma.LinkMetadataWhereInput[] = [];
+  for (const group of parsed.orGroups) {
+    const andConditions: Prisma.LinkMetadataWhereInput[] = [];
+
+    for (const token of group.includes) {
+      andConditions.push({ searchText: { contains: token.value } });
+    }
+    for (const token of group.excludes) {
+      andConditions.push({ NOT: { searchText: { contains: token.value } } });
+    }
+
+    if (andConditions.length === 1) {
+      orConditions.push(andConditions[0]);
+    } else if (andConditions.length > 1) {
+      orConditions.push({ AND: andConditions });
+    }
+  }
+
+  if (orConditions.length === 0) return null;
+  if (orConditions.length === 1) return orConditions[0];
+  return { OR: orConditions };
+}
+
+/**
  * Note検索用のWhereInputを生成
- * 
+ *
  * @param query - 検索クエリ文字列
  * @param baseWhere - 追加の基本条件（isArchived, isPinnedなど）
  * @returns Prisma.NoteWhereInput
- * 
+ *
  * @example
  * // 基本的な使い方
  * const where = createNoteWhereInput('react typescript');
  * const notes = await prisma.note.findMany({ where });
- * 
+ *
  * // アーカイブ除外 + 検索
  * const where = createNoteWhereInput('react', { isArchived: false });
- * 
+ *
  * // 複雑な検索
  * const where = createNoteWhereInput('react -jquery | "next js"');
  */
@@ -328,25 +380,48 @@ export function createNoteWhereInput(
   baseWhere: Prisma.NoteWhereInput = {}
 ): Prisma.NoteWhereInput {
   const parsed = parseSearchQuery(query);
-  
+
   if (parsed.isEmpty) {
     return baseWhere;
   }
 
-  const searchCondition = createWhereInput(
+  // Note自体のフィールド検索条件
+  const noteFieldCondition = createWhereInput(
     parsed,
     [...NOTE_SEARCH_FIELDS],
     { jsonFields: [...NOTE_JSON_FIELDS] }
   );
 
+  // LinkMetadata経由の検索条件
+  const linkMetadataCondition = buildLinkMetadataCondition(parsed);
+
+  // 統合: Note自体 OR 関連LinkMetadataにマッチ
+  let searchCondition: Prisma.NoteWhereInput;
+  if (linkMetadataCondition) {
+    searchCondition = {
+      OR: [
+        noteFieldCondition as Prisma.NoteWhereInput,
+        {
+          links: {
+            some: {
+              linkMetadata: linkMetadataCondition,
+            },
+          },
+        },
+      ],
+    };
+  } else {
+    searchCondition = noteFieldCondition as Prisma.NoteWhereInput;
+  }
+
   // baseWhereと検索条件をマージ
   if (Object.keys(baseWhere).length === 0) {
-    return searchCondition as Prisma.NoteWhereInput;
+    return searchCondition;
   }
 
   return {
     ...baseWhere,
-    AND: [searchCondition as Prisma.NoteWhereInput],
+    AND: [searchCondition],
   };
 }
 

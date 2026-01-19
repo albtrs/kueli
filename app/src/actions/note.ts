@@ -5,6 +5,8 @@ import { auth } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import { Note, NoteVersion, NoteCreateData, NoteUpdateData } from '@/lib/types'
 import { UnauthorizedError, NotFoundError, handleServerActionError } from '@/lib/errors'
+import { extractAllUrls } from '@/lib/media-utils'
+import { processNoteLinks } from '@/lib/link-metadata'
 
 // ページネーション結果の型
 export interface NotesPageResult {
@@ -263,7 +265,15 @@ export async function saveNote(id: string | null, data: NoteCreateData | NoteUpd
 
     revalidatePath('/')
     revalidatePath(`/notes/${note.id}`)
-    
+
+    // URLを抽出してLinkMetadataを処理（非同期、待機しない）
+    const urls = extractAllUrls(noteData.content)
+    if (urls.length > 0) {
+      processNoteLinks(note.id, urls).catch((err) => {
+        console.error('processNoteLinks error:', err)
+      })
+    }
+
     return parseNote(note)
   } catch (error) {
     console.error('saveNote error:', handleServerActionError(error))

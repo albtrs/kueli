@@ -55,7 +55,7 @@ export function extractFirstExternalLink(content: string): string | null {
       return url;
     }
   }
-  
+
   // プレーンURL形式
   const plainUrlPattern = /(?<!\]\()https?:\/\/[^\s<>\[\]]+/g;
   while ((match = plainUrlPattern.exec(content || '')) !== null) {
@@ -64,6 +64,48 @@ export function extractFirstExternalLink(content: string): string | null {
       return url;
     }
   }
-  
+
   return null;
+}
+
+// URL種別
+export type UrlType = 'twitter' | 'youtube' | 'ogp';
+
+// URL種別を判定
+export function getUrlType(url: string): UrlType {
+  if (isTwitterUrl(url)) return 'twitter';
+  if (isYouTubeUrl(url)) return 'youtube';
+  return 'ogp';
+}
+
+// コンテンツからすべてのURLを抽出
+export function extractAllUrls(content: string): string[] {
+  const urls = new Set<string>();
+
+  // Markdownリンク形式: [text](url)
+  const markdownLinkPattern = /\[.*?\]\((https?:\/\/[^)]+)\)/g;
+  let match;
+  while ((match = markdownLinkPattern.exec(content || '')) !== null) {
+    urls.add(normalizeUrl(match[1]));
+  }
+
+  // プレーンURL形式
+  const plainUrlPattern = /(?<!\]\()https?:\/\/[^\s<>\[\]()]+/g;
+  while ((match = plainUrlPattern.exec(content || '')) !== null) {
+    urls.add(normalizeUrl(match[0]));
+  }
+
+  return Array.from(urls);
+}
+
+// URLを正規化（末尾のスラッシュ、クエリパラメータの整理など）
+function normalizeUrl(url: string): string {
+  try {
+    // 末尾の句読点を削除
+    url = url.replace(/[.,;:!?]+$/, '');
+    const parsed = new URL(url);
+    return parsed.href;
+  } catch {
+    return url;
+  }
 }

@@ -29,8 +29,47 @@ model Note {
   isArchived Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-  
+
   versions   NoteVersion[]
+  links      NoteLinkMetadata[]
+}
+
+model LinkMetadata {
+  id          String    @id @default(cuid())
+  url         String    @unique
+  type        String    // "ogp" | "twitter" | "youtube"
+
+  // メタデータ
+  title       String?
+  description String?
+  image       String?
+  siteName    String?
+  tweetData   String?   // Twitter専用（JSON）
+
+  // 検索用（全メタ情報を結合したテキスト）
+  searchText  String    @default("")
+
+  // 取得状態
+  fetchedAt   DateTime?
+  errorAt     DateTime?
+  errorReason String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  notes       NoteLinkMetadata[]
+}
+
+model NoteLinkMetadata {
+  noteId         String
+  linkMetadataId String
+
+  note         Note         @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  linkMetadata LinkMetadata @relation(fields: [linkMetadataId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, linkMetadataId])
+  @@index([noteId])
+  @@index([linkMetadataId])
 }
 
 model NoteVersion {
