@@ -179,6 +179,64 @@ export async function fetchNote(id: string): Promise<Note | null> {
   }
 }
 
+/**
+ * タイトル変更時に他ノートのWikiLinkを更新
+ * @param noteId - 変更されたノートのID
+ * @param oldTitle - 変更前のタイトル
+ * @param newTitle - 変更後のタイトル
+ * @returns 更新されたノートの数
+ */
+async function updateWikiLinksOnTitleChange(
+  noteId: string,
+  oldTitle: string,
+  newTitle: string
+): Promise<number> {
+  // 空タイトルや同じタイトルの場合はスキップ
+  if (!oldTitle.trim() || !newTitle.trim() || oldTitle === newTitle) {
+    return 0
+  }
+
+  // 1. [[旧タイトル を含むノートをSQL検索（予備フィルタ）
+  const potentialNotes = await prisma.note.findMany({
+    where: {
+      id: { not: noteId },
+      content: { contains: `[[${oldTitle}` },
+    },
+    select: { id: true, content: true },
+  })
+
+  if (potentialNotes.length === 0) return 0
+
+  // 2. 正規表現で厳密マッチ＆置換
+  const escapedTitle = oldTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`\\[\\[${escapedTitle}(\\|[^\\]]+)?\\]\\]`, 'g')
+
+  const updates: { id: string; content: string }[] = []
+  for (const note of potentialNotes) {
+    if (regex.test(note.content)) {
+      regex.lastIndex = 0
+      const newContent = note.content.replace(regex, (_: string, alias: string | undefined) =>
+        alias ? `[[${newTitle}${alias}]]` : `[[${newTitle}]]`
+      )
+      if (newContent !== note.content) {
+        updates.push({ id: note.id, content: newContent })
+      }
+    }
+  }
+
+  if (updates.length === 0) return 0
+
+  // 3. トランザクションで一括更新
+  await prisma.$transaction(
+    updates.map(u => prisma.note.update({
+      where: { id: u.id },
+      data: { content: u.content },
+    }))
+  )
+
+  return updates.length
+}
+
 export async function saveNote(id: string | null, data: NoteCreateData | NoteUpdateData): Promise<Note> {
   try {
     const session = await auth()
@@ -256,6 +314,21 @@ export async function saveNote(id: string | null, data: NoteCreateData | NoteUpd
         where: { id },
         data: noteData,
       })
+
+      // タイトル変更時のWikiLink更新
+      const oldTitle = existingNote?.title
+      const newTitle = noteData.title
+      if (oldTitle && newTitle && oldTitle !== newTitle) {
+        try {
+          const updatedCount = await updateWikiLinksOnTitleChange(id, oldTitle, newTitle)
+          if (updatedCount > 0) {
+            console.log(`WikiLinks updated in ${updatedCount} notes`)
+          }
+        } catch (err) {
+          console.error('WikiLink update failed:', err)
+          // WikiLink更新失敗はエラーとしない（メインの保存は成功）
+        }
+      }
     } else {
       // Create new note
       note = await prisma.note.create({
