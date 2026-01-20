@@ -1,21 +1,17 @@
-import { getIronSession } from "iron-session"
 import { cookies } from "next/headers"
-import { SessionData, getSessionOptions, defaultSession } from "./session"
+import { AccessCookieName, verifyAccessToken } from "./jwt"
 
 export async function auth() {
   const cookieStore = await cookies()
-  const session = await getIronSession<SessionData>(cookieStore, getSessionOptions())
-  
-  if (!session.isLoggedIn || !session.user) {
-    return null
-  }
+  const token = cookieStore.get(AccessCookieName)?.value
+  if (!token) return null
 
-  return {
-    user: session.user
-  }
+  const user = await verifyAccessToken(token)
+  if (!user) return null
+
+  return { user }
 }
 
 export async function getSession() {
-  const cookieStore = await cookies()
-  return await getIronSession<SessionData>(cookieStore, getSessionOptions())
+  return await auth()
 }

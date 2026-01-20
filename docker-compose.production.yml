@@ -15,6 +15,7 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/prisma/db/app.db
       - SESSION_SECRET=${SESSION_SECRET}
+      - API_INTERNAL_ORIGIN=http://kueli-api:8080
     restart: unless-stopped
     # ヘルスチェック
     healthcheck:
@@ -25,6 +26,27 @@ services:
       start_period: 40s
     
     # リバプロで使用するネットワークに接続
+    networks:
+      - apps_net
+  kueli-api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.production
+    container_name: kueli-api
+    expose:
+      - 8080
+    volumes:
+      - ./data/uploads:/data/uploads
+      - ./data/prisma:/data/prisma
+    environment:
+      - TZ=Asia/Tokyo
+      - APP_ENV=production
+      - PORT=8080
+      - DATABASE_PATH=/data/prisma/app.db
+      - UPLOADS_DIR=/data/uploads
+      - JWT_SECRET=${JWT_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET}
+    restart: unless-stopped
     networks:
       - apps_net
 networks:

@@ -1,12 +1,9 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
-import { auth } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import { Note, NoteVersion, NoteCreateData, NoteUpdateData } from '@/lib/types'
 import { UnauthorizedError, NotFoundError, handleServerActionError } from '@/lib/errors'
-import { extractAllUrls } from '@/lib/media-utils'
-import { processNoteLinks } from '@/lib/link-metadata'
+import { apiFetch } from '@/lib/api-client'
 
 // ページネーション結果の型
 export interface NotesPageResult {
@@ -17,32 +14,45 @@ export interface NotesPageResult {
 
 const DEFAULT_PAGE_SIZE = 20
 
-// バージョン管理設定
-const VERSION_INTERVAL_MS = 30 * 60 * 1000; // 30分（ms）
-const MAX_VERSIONS_PER_NOTE = 20; // 1ノートあたりの最大履歴数
-
-// Helper: コンテンツからタグを抽出（#で始まる単語）
-function extractTagsFromContent(content: string): string {
-  const tagRegex = /#([^\s#]+)/g
-  const matches = content.match(tagRegex)
-  if (!matches) return '[]'
-  const tags = [...new Set(matches.map(t => t.slice(1)))]
-  return JSON.stringify(tags)
+function parseNote(apiNote: any): Note {
+  return {
+    id: apiNote.id,
+    title: apiNote.title,
+    content: apiNote.content,
+    isPinned: apiNote.isPinned,
+    isArchived: apiNote.isArchived,
+    tags: apiNote.tags || [],
+    images: apiNote.images || [],
+    createdAt: new Date(apiNote.createdAt),
+    updatedAt: new Date(apiNote.updatedAt),
+  }
 }
 
-// Helper: Parse JSON fields
-function parseNote(dbNote: any): Note {
+function parseNoteVersion(apiVersion: any): NoteVersion {
   return {
-    id: dbNote.id,
-    title: dbNote.title,
-    content: dbNote.content,
-    isPinned: dbNote.isPinned,
-    isArchived: dbNote.isArchived,
-    tags: JSON.parse(dbNote.tags || '[]'),
-    images: JSON.parse(dbNote.images || '[]'),
-    createdAt: dbNote.createdAt,
-    updatedAt: dbNote.updatedAt,
+    id: apiVersion.id,
+    title: apiVersion.title,
+    content: apiVersion.content,
+    tags: apiVersion.tags || '[]',
+    createdAt: new Date(apiVersion.createdAt),
+    noteId: apiVersion.noteId,
   }
+}
+
+async function requestJSON<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await apiFetch(path, init)
+  if (response.status === 401) {
+    throw new UnauthorizedError()
+  }
+  if (response.status === 404) {
+    throw new NotFoundError('Not found')
+  }
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null)
+    const message = payload?.error || 'Request failed'
+    throw new Error(message)
+  }
+  return response.json() as Promise<T>
 }
 
 /**
@@ -65,61 +75,25 @@ export async function fetchNotesPage(
   sortOrder: 'desc' | 'asc' = 'desc'
 ): Promise<NotesPageResult> {
   try {
-    const session = await auth()
-    if (!session?.user) {
-      throw new UnauthorizedError()
-    }
+    const params = new URLSearchParams()
+    if (cursor) params.set('cursor', cursor)
+    if (limit) params.set('limit', String(limit))
+    if (tag) params.set('tag', tag)
+    if (search) params.set('search', search)
+    if (includeArchived) params.set('includeArchived', 'true')
+    if (excludePinned) params.set('excludePinned', 'true')
+    if (sortOrder) params.set('sort', sortOrder)
 
-    // 1件多く取得して hasMore を判定
-    const take = limit + 1
-
-    // フィルタ条件を構築
-    const where: any = {}
-    
-    // アーカイブフィルタ（デフォルトでアーカイブを除外）
-    if (!includeArchived) {
-      where.isArchived = false
-    }
-    
-    // ピン留め除外フィルタ
-    if (excludePinned) {
-      where.isPinned = false
-    }
-    
-    if (tag) {
-      if (tag === '__untagged__') {
-        // タグなしのノート: tags が空配列 "[]" のもの
-        where.tags = { equals: '[]' }
-      } else {
-        where.tags = { contains: `"${tag}"` }
-      }
-    }
-    
-    if (search) {
-      where.OR = [
-        { title: { contains: search } },
-        { content: { contains: search } },
-      ]
-    }
-
-    const notes = await prisma.note.findMany({
-      where,
-      orderBy: { updatedAt: sortOrder },
-      take,
-      ...(cursor && {
-        skip: 1,
-        cursor: { id: cursor },
-      }),
-    })
-
-    const hasMore = notes.length > limit
-    const resultNotes = hasMore ? notes.slice(0, limit) : notes
-    const nextCursor = hasMore ? resultNotes[resultNotes.length - 1]?.id : null
+    const data = await requestJSON<{
+      notes: any[]
+      nextCursor: string | null
+      hasMore: boolean
+    }>(`/api/notes?${params.toString()}`)
 
     return {
-      notes: resultNotes.map(parseNote),
-      nextCursor,
-      hasMore,
+      notes: data.notes.map(parseNote),
+      nextCursor: data.nextCursor,
+      hasMore: data.hasMore,
     }
   } catch (error) {
     console.error('fetchNotesPage error:', handleServerActionError(error))
@@ -134,22 +108,18 @@ export async function fetchNotesPage(
  */
 export async function fetchNotes(includeArchived: boolean = false): Promise<Note[]> {
   try {
-    const session = await auth()
-    if (!session?.user) {
-      throw new UnauthorizedError()
+    const all: Note[] = []
+    let cursor: string | null = null
+    let hasMore = true
+
+    while (hasMore) {
+      const page = await fetchNotesPage(cursor, 200, undefined, undefined, includeArchived, false, 'desc')
+      all.push(...page.notes)
+      cursor = page.nextCursor
+      hasMore = page.hasMore
     }
 
-    const where: any = {}
-    if (!includeArchived) {
-      where.isArchived = false
-    }
-
-    const notes = await prisma.note.findMany({
-      where,
-      orderBy: { updatedAt: 'desc' },
-    })
-
-    return notes.map(parseNote)
+    return all
   } catch (error) {
     console.error('fetchNotes error:', handleServerActionError(error))
     throw error
@@ -162,18 +132,12 @@ export async function fetchNotes(includeArchived: boolean = false): Promise<Note
  */
 export async function fetchNote(id: string): Promise<Note | null> {
   try {
-    const session = await auth()
-    if (!session?.user) {
-      throw new UnauthorizedError()
-    }
-
-    const note = await prisma.note.findUnique({
-      where: { id },
-    })
-
-    if (!note) return null
+    const note = await requestJSON<any>(`/api/notes/${id}`)
     return parseNote(note)
   } catch (error) {
+    if (error instanceof NotFoundError) {
+      return null
+    }
     console.error('fetchNote error:', handleServerActionError(error))
     throw error
   }
@@ -186,166 +150,20 @@ export async function fetchNote(id: string): Promise<Note | null> {
  * @param newTitle - 変更後のタイトル
  * @returns 更新されたノートの数
  */
-async function updateWikiLinksOnTitleChange(
-  noteId: string,
-  oldTitle: string,
-  newTitle: string
-): Promise<number> {
-  // 空タイトルや同じタイトルの場合はスキップ
-  if (!oldTitle.trim() || !newTitle.trim() || oldTitle === newTitle) {
-    return 0
-  }
-
-  // 1. [[旧タイトル を含むノートをSQL検索（予備フィルタ）
-  const potentialNotes = await prisma.note.findMany({
-    where: {
-      id: { not: noteId },
-      content: { contains: `[[${oldTitle}` },
-    },
-    select: { id: true, content: true },
-  })
-
-  if (potentialNotes.length === 0) return 0
-
-  // 2. 正規表現で厳密マッチ＆置換
-  const escapedTitle = oldTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const regex = new RegExp(`\\[\\[${escapedTitle}(\\|[^\\]]+)?\\]\\]`, 'g')
-
-  const updates: { id: string; content: string }[] = []
-  for (const note of potentialNotes) {
-    if (regex.test(note.content)) {
-      regex.lastIndex = 0
-      const newContent = note.content.replace(regex, (_: string, alias: string | undefined) =>
-        alias ? `[[${newTitle}${alias}]]` : `[[${newTitle}]]`
-      )
-      if (newContent !== note.content) {
-        updates.push({ id: note.id, content: newContent })
-      }
-    }
-  }
-
-  if (updates.length === 0) return 0
-
-  // 3. トランザクションで一括更新
-  await prisma.$transaction(
-    updates.map(u => prisma.note.update({
-      where: { id: u.id },
-      data: { content: u.content },
-    }))
-  )
-
-  return updates.length
-}
-
 export async function saveNote(id: string | null, data: NoteCreateData | NoteUpdateData): Promise<Note> {
   try {
-    const session = await auth()
-    if (!session?.user) {
-      throw new UnauthorizedError()
-    }
+    const method = id ? 'PUT' : 'POST'
+    const path = id ? `/api/notes/${id}` : '/api/notes'
 
-    // 既存ノートの場合、現在の値を取得して保持
-    let existingNote: any = null
-    if (id) {
-      existingNote = await prisma.note.findUnique({ where: { id } })
-    }
-
-    const noteData = {
-      title: data.title || '無題のメモ',
-      content: data.content || '',
-      // 明示的に指定されていない場合は既存の値を保持、なければデフォルト値
-      isPinned: data.isPinned !== undefined ? data.isPinned : (existingNote?.isPinned ?? false),
-      isArchived: ('isArchived' in data && data.isArchived !== undefined) ? data.isArchived : (existingNote?.isArchived ?? false),
-      tags: JSON.stringify(data.tags || []),
-      images: data.images !== undefined ? JSON.stringify(data.images) : (existingNote?.images ?? '[]'),
-    }
-
-    let note
-    if (id) {
-      // 既存ノートの更新時：バージョン管理を適用
-      // existingNote は上で既に取得済み
-      const currentNote = existingNote
-      
-      if (currentNote) {
-        // 最新のバージョンを取得
-        const lastVersion = await prisma.noteVersion.findFirst({
-          where: { noteId: id },
-          orderBy: { createdAt: 'desc' },
-        })
-        
-        const now = new Date()
-        const shouldCreateVersion = 
-          !lastVersion || 
-          (now.getTime() - lastVersion.createdAt.getTime() > VERSION_INTERVAL_MS)
-        
-        // 一定時間経過していたら、現在の状態をバージョンとして保存
-        if (shouldCreateVersion && (currentNote.title || currentNote.content)) {
-          await prisma.noteVersion.create({
-            data: {
-              noteId: id,
-              title: currentNote.title,
-              content: currentNote.content,
-              tags: currentNote.tags, // tagsも保存
-            }
-          })
-          
-          // 古いバージョンのクリーンアップ
-          const versionCount = await prisma.noteVersion.count({
-            where: { noteId: id }
-          })
-          
-          if (versionCount > MAX_VERSIONS_PER_NOTE) {
-            // 最も古いバージョンを削除
-            const oldestVersion = await prisma.noteVersion.findFirst({
-              where: { noteId: id },
-              orderBy: { createdAt: 'asc' },
-            })
-            if (oldestVersion) {
-              await prisma.noteVersion.delete({
-                where: { id: oldestVersion.id }
-              })
-            }
-          }
-        }
-      }
-      
-      // Update existing note
-      note = await prisma.note.update({
-        where: { id },
-        data: noteData,
-      })
-
-      // タイトル変更時のWikiLink更新
-      const oldTitle = existingNote?.title
-      const newTitle = noteData.title
-      if (oldTitle && newTitle && oldTitle !== newTitle) {
-        try {
-          const updatedCount = await updateWikiLinksOnTitleChange(id, oldTitle, newTitle)
-          if (updatedCount > 0) {
-            console.log(`WikiLinks updated in ${updatedCount} notes`)
-          }
-        } catch (err) {
-          console.error('WikiLink update failed:', err)
-          // WikiLink更新失敗はエラーとしない（メインの保存は成功）
-        }
-      }
-    } else {
-      // Create new note
-      note = await prisma.note.create({
-        data: noteData,
-      })
-    }
+    const payload: Record<string, unknown> = { ...data }
+    const note = await requestJSON<any>(path, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
 
     revalidatePath('/')
     revalidatePath(`/notes/${note.id}`)
-
-    // URLを抽出してLinkMetadataを処理（非同期、待機しない）
-    const urls = extractAllUrls(noteData.content)
-    if (urls.length > 0) {
-      processNoteLinks(note.id, urls).catch((err) => {
-        console.error('processNoteLinks error:', err)
-      })
-    }
 
     return parseNote(note)
   } catch (error) {
@@ -356,15 +174,7 @@ export async function saveNote(id: string | null, data: NoteCreateData | NoteUpd
 
 export async function deleteNote(id: string): Promise<void> {
   try {
-    const session = await auth()
-    if (!session?.user) {
-      throw new UnauthorizedError()
-    }
-
-    await prisma.note.delete({
-      where: { id },
-    })
-
+    await requestJSON(`/api/notes/${id}`, { method: 'DELETE' })
     revalidatePath('/')
   } catch (error) {
     console.error('deleteNote error:', handleServerActionError(error))
@@ -374,19 +184,7 @@ export async function deleteNote(id: string): Promise<void> {
 
 export async function togglePin(id: string): Promise<Note> {
   try {
-    const session = await auth()
-    if (!session?.user) {
-      throw new UnauthorizedError()
-    }
-
-    const note = await prisma.note.findUnique({ where: { id } })
-    if (!note) throw new NotFoundError('Note not found')
-
-    const updated = await prisma.note.update({
-      where: { id },
-      data: { isPinned: !note.isPinned },
-    })
-
+    const updated = await requestJSON<any>(`/api/notes/${id}/pin`, { method: 'POST' })
     revalidatePath('/')
     return parseNote(updated)
   } catch (error) {
@@ -397,23 +195,7 @@ export async function togglePin(id: string): Promise<Note> {
 
 export async function toggleArchive(id: string): Promise<Note> {
   try {
-    const session = await auth()
-    if (!session?.user) {
-      throw new UnauthorizedError()
-    }
-
-    const note = await prisma.note.findUnique({ where: { id } })
-    if (!note) throw new NotFoundError('Note not found')
-
-    const updated = await prisma.note.update({
-      where: { id },
-      data: { 
-        isArchived: !note.isArchived,
-        // アーカイブ時はピン留めを解除
-        ...(note.isArchived === false && { isPinned: false }),
-      },
-    })
-
+    const updated = await requestJSON<any>(`/api/notes/${id}/archive`, { method: 'POST' })
     revalidatePath('/')
     return parseNote(updated)
   } catch (error) {
@@ -429,17 +211,8 @@ export async function toggleArchive(id: string): Promise<Note> {
  */
 export async function fetchNoteVersions(noteId: string): Promise<NoteVersion[]> {
   try {
-    const session = await auth()
-    if (!session?.user) {
-      throw new UnauthorizedError()
-    }
-
-    const versions = await prisma.noteVersion.findMany({
-      where: { noteId },
-      orderBy: { createdAt: 'desc' },
-    })
-
-    return versions
+    const versions = await requestJSON<any[]>(`/api/notes/${noteId}/versions`)
+    return versions.map(parseNoteVersion)
   } catch (error) {
     console.error('fetchNoteVersions error:', handleServerActionError(error))
     throw error
@@ -451,17 +224,12 @@ export async function fetchNoteVersions(noteId: string): Promise<NoteVersion[]> 
  */
 export async function fetchNoteVersion(versionId: string): Promise<NoteVersion | null> {
   try {
-    const session = await auth()
-    if (!session?.user) {
-      throw new UnauthorizedError()
-    }
-
-    const version = await prisma.noteVersion.findUnique({
-      where: { id: versionId },
-    })
-
-    return version
+    const version = await requestJSON<any>(`/api/versions/${versionId}`)
+    return parseNoteVersion(version)
   } catch (error) {
+    if (error instanceof NotFoundError) {
+      return null
+    }
     console.error('fetchNoteVersion error:', handleServerActionError(error))
     throw error
   }
@@ -472,52 +240,11 @@ export async function fetchNoteVersion(versionId: string): Promise<NoteVersion |
  */
 export async function restoreNoteVersion(versionId: string): Promise<Note> {
   try {
-    const session = await auth()
-    if (!session?.user) {
-      throw new UnauthorizedError()
-    }
-
-    const version = await prisma.noteVersion.findUnique({
-      where: { id: versionId },
+    const restored = await requestJSON<any>(`/api/versions/${versionId}/restore`, {
+      method: 'POST',
     })
-    
-    if (!version) {
-      throw new NotFoundError('Version not found')
-    }
-
-    // 現在の状態をバージョンとして保存（復元前のバックアップ）
-    const currentNote = await prisma.note.findUnique({
-      where: { id: version.noteId },
-    })
-    
-    if (currentNote) {
-      await prisma.noteVersion.create({
-        data: {
-          noteId: version.noteId,
-          title: currentNote.title,
-          content: currentNote.content,
-          tags: currentNote.tags, // tagsも保存
-        }
-      })
-    }
-
-    // ノートを復元（tagsはバージョンに保存されていればそれを使用、なければ再計算）
-    const restoredTags = version.tags && version.tags !== '[]' 
-      ? version.tags 
-      : extractTagsFromContent(version.content)
-
-    const restored = await prisma.note.update({
-      where: { id: version.noteId },
-      data: {
-        title: version.title,
-        content: version.content,
-        tags: restoredTags,
-      },
-    })
-
     revalidatePath('/')
-    revalidatePath(`/notes/${version.noteId}`)
-    
+    revalidatePath(`/notes/${restored.id}`)
     return parseNote(restored)
   } catch (error) {
     console.error('restoreNoteVersion error:', handleServerActionError(error))
@@ -530,14 +257,7 @@ export async function restoreNoteVersion(versionId: string): Promise<Note> {
  */
 export async function deleteNoteVersion(versionId: string): Promise<void> {
   try {
-    const session = await auth()
-    if (!session?.user) {
-      throw new UnauthorizedError()
-    }
-
-    await prisma.noteVersion.delete({
-      where: { id: versionId },
-    })
+    await requestJSON(`/api/versions/${versionId}`, { method: 'DELETE' })
   } catch (error) {
     console.error('deleteNoteVersion error:', handleServerActionError(error))
     throw error
@@ -549,28 +269,7 @@ export async function deleteNoteVersion(versionId: string): Promise<void> {
  */
 export async function duplicateNote(id: string): Promise<Note> {
   try {
-    const session = await auth()
-    if (!session?.user) {
-      throw new UnauthorizedError()
-    }
-
-    const originalNote = await prisma.note.findUnique({ where: { id } })
-    if (!originalNote) {
-      throw new NotFoundError('Note not found')
-    }
-
-    // 新しいノートを作成（ピン留めとアーカイブ状態はリセット）
-    const duplicatedNote = await prisma.note.create({
-      data: {
-        title: `${originalNote.title}_Copy`,
-        content: originalNote.content,
-        isPinned: false,
-        isArchived: false,
-        tags: originalNote.tags,
-        images: originalNote.images,
-      }
-    })
-
+    const duplicatedNote = await requestJSON<any>(`/api/notes/${id}/duplicate`, { method: 'POST' })
     revalidatePath('/')
     return parseNote(duplicatedNote)
   } catch (error) {
@@ -586,48 +285,8 @@ export async function duplicateNote(id: string): Promise<Note> {
  */
 export async function fetchBacklinks(noteId: string): Promise<Note[]> {
   try {
-    const session = await auth()
-    if (!session?.user) {
-      throw new UnauthorizedError()
-    }
-
-    // まず対象ノートのタイトルを取得
-    const targetNote = await prisma.note.findUnique({
-      where: { id: noteId },
-      select: { title: true },
-    })
-
-    if (!targetNote) {
-      throw new NotFoundError('Note not found')
-    }
-
-    const title = targetNote.title
-
-    // タイトルが空の場合はバックリンクなし
-    if (!title.trim()) {
-      return []
-    }
-
-    // [[タイトル]] または [[タイトル|エイリアス]] を含むノートを検索
-    // SQLiteのLIKE検索で部分一致
-    const notes = await prisma.note.findMany({
-      where: {
-        id: { not: noteId }, // 自分自身を除外
-        isArchived: false,
-        content: {
-          contains: `[[${title}`,
-        },
-      },
-      orderBy: { updatedAt: 'desc' },
-    })
-
-    // より厳密にフィルタリング（[[タイトル]] または [[タイトル|...]] の形式をチェック）
-    const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const wikiLinkRegex = new RegExp(`\\[\\[${escapedTitle}(\\|[^\\]]+)?\\]\\]`, 'i')
-
-    const filteredNotes = notes.filter(note => wikiLinkRegex.test(note.content))
-
-    return filteredNotes.map(parseNote)
+    const notes = await requestJSON<any[]>(`/api/notes/${noteId}/backlinks`)
+    return notes.map(parseNote)
   } catch (error) {
     console.error('fetchBacklinks error:', handleServerActionError(error))
     throw error

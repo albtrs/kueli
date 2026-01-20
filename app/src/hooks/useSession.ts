@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface User {
-  id: string;
-  email: string;
-  name: string | null;
+  id: number;
+  username: string;
+  isAdmin: boolean;
 }
 
 interface SessionState {
@@ -24,21 +24,46 @@ export function useSession() {
 
   const fetchSession = useCallback(async () => {
     try {
-      const response = await fetch('/api/auth/session');
+      const response = await fetch('/api/auth/me', {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         setSession({
           user: data.user,
-          isLoggedIn: data.isLoggedIn,
-          status: data.isLoggedIn ? 'authenticated' : 'unauthenticated',
+          isLoggedIn: true,
+          status: 'authenticated',
         });
-      } else {
-        setSession({
-          user: null,
-          isLoggedIn: false,
-          status: 'unauthenticated',
-        });
+        return;
       }
+
+      if (response.status === 401) {
+        const refreshResponse = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          credentials: 'include',
+        });
+
+        if (refreshResponse.ok) {
+          const meResponse = await fetch('/api/auth/me', {
+            credentials: 'include',
+          });
+          if (meResponse.ok) {
+            const data = await meResponse.json();
+            setSession({
+              user: data.user,
+              isLoggedIn: true,
+              status: 'authenticated',
+            });
+            return;
+          }
+        }
+      }
+
+      setSession({
+        user: null,
+        isLoggedIn: false,
+        status: 'unauthenticated',
+      });
     } catch {
       setSession({
         user: null,
@@ -70,7 +95,7 @@ export function useRequireAuth(redirectTo = '/login') {
 
 export async function logout() {
   try {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     window.location.href = '/login';
   } catch (error) {
     console.error('Logout error:', error);

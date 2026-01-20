@@ -20,6 +20,19 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
 
+  async rewrites() {
+    const apiOrigin = process.env.API_INTERNAL_ORIGIN;
+    if (!apiOrigin) {
+      return [];
+    }
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${apiOrigin}/api/:path*`,
+      },
+    ];
+  },
+
   // セキュリティヘッダー
   async headers() {
     return [

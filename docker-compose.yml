@@ -22,6 +22,30 @@ services:
       - NODE_ENV=development
       - DATABASE_URL=file:/workspace/app/prisma/db/app.db
       - SESSION_SECRET=${SESSION_SECRET}
+      - API_INTERNAL_ORIGIN=http://api:8080
+    tty: true
+    stdin_open: true
+    restart: unless-stopped
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: kueli-api
+    working_dir: /workspace
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./api:/workspace
+      - ./data/prisma:/workspace/data/prisma
+      - ./data/uploads:/workspace/data/uploads
+    environment:
+      - TZ=Asia/Tokyo
+      - APP_ENV=development
+      - PORT=8080
+      - DATABASE_PATH=/workspace/data/prisma/app.db
+      - UPLOADS_DIR=/workspace/data/uploads
+      - JWT_SECRET=${JWT_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET}
     tty: true
     stdin_open: true
     restart: unless-stopped

@@ -1,10 +1,8 @@
-import { prisma } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
 import { cache } from 'react'
 import { Note } from '@/lib/types'
 import { UnauthorizedError } from '@/lib/errors'
-import { createNoteWhereInput } from '@/lib/search-parser'
-import type { Prisma } from '@prisma/client'
+import { apiFetch } from '@/lib/api-client'
 
 // デフォルトの1ページあたりの件数
 export const DEFAULT_PAGE_SIZE = 20
@@ -24,10 +22,10 @@ function parseNote(dbNote: any): Note {
     content: dbNote.content,
     isPinned: dbNote.isPinned,
     isArchived: dbNote.isArchived,
-    tags: JSON.parse(dbNote.tags || '[]'),
-    images: JSON.parse(dbNote.images || '[]'),
-    createdAt: dbNote.createdAt,
-    updatedAt: dbNote.updatedAt,
+    tags: dbNote.tags || [],
+    images: dbNote.images || [],
+    createdAt: new Date(dbNote.createdAt),
+    updatedAt: new Date(dbNote.updatedAt),
   }
 }
 
@@ -55,55 +53,25 @@ export async function getNotesPage(
     throw new UnauthorizedError()
   }
 
-  // 1件多く取得して hasMore を判定
-  const take = limit + 1
+  const params = new URLSearchParams()
+  if (cursor) params.set('cursor', cursor)
+  if (limit) params.set('limit', String(limit))
+  if (tag) params.set('tag', tag)
+  if (search) params.set('search', search)
+  if (includeArchived) params.set('includeArchived', 'true')
+  if (excludePinned) params.set('excludePinned', 'true')
+  if (sortOrder) params.set('sort', sortOrder)
 
-  // フィルタ条件を構築
-  const baseWhere: Prisma.NoteWhereInput = {}
-  
-  // アーカイブフィルタ（デフォルトでアーカイブを除外）
-  if (!includeArchived) {
-    baseWhere.isArchived = false
+  const response = await apiFetch(`/api/notes?${params.toString()}`)
+  if (!response.ok) {
+    throw new Error('Failed to fetch notes')
   }
-  
-  // ピン留め除外フィルタ
-  if (excludePinned) {
-    baseWhere.isPinned = false
-  }
-  
-  if (tag) {
-    if (tag === '__untagged__') {
-      // タグなしのノート: tags が空配列 "[]" のもの
-      baseWhere.tags = { equals: '[]' }
-    } else {
-      // SQLite の JSON には LIKE で対応
-      baseWhere.tags = { contains: `"${tag}"` }
-    }
-  }
-  
-  // 検索クエリをパース（Googleライクな構文対応）
-  const where = search 
-    ? createNoteWhereInput(search, baseWhere)
-    : baseWhere
-
-  const notes = await prisma.note.findMany({
-    where,
-    orderBy: { updatedAt: sortOrder },
-    take,
-    ...(cursor && {
-      skip: 1, // カーソル自体はスキップ
-      cursor: { id: cursor },
-    }),
-  })
-
-  const hasMore = notes.length > limit
-  const resultNotes = hasMore ? notes.slice(0, limit) : notes
-  const nextCursor = hasMore ? resultNotes[resultNotes.length - 1]?.id : null
+  const data = await response.json()
 
   return {
-    notes: resultNotes.map(parseNote),
-    nextCursor,
-    hasMore,
+    notes: data.notes.map(parseNote),
+    nextCursor: data.nextCursor,
+    hasMore: data.hasMore,
   }
 }
 
@@ -119,18 +87,18 @@ export const getNotes = cache(async (includeArchived: boolean = false): Promise<
   if (!session?.user) {
     throw new UnauthorizedError()
   }
+  const all: Note[] = []
+  let cursor: string | null = null
+  let hasMore = true
 
-  const where: any = {}
-  if (!includeArchived) {
-    where.isArchived = false
+  while (hasMore) {
+    const page = await getNotesPage(cursor, DEFAULT_PAGE_SIZE, undefined, undefined, includeArchived, false, 'desc')
+    all.push(...page.notes)
+    cursor = page.nextCursor
+    hasMore = page.hasMore
   }
 
-  const notes = await prisma.note.findMany({
-    where,
-    orderBy: { updatedAt: 'desc' },
-  })
-
-  return notes.map(parseNote)
+  return all
 })
 
 /**
@@ -142,11 +110,11 @@ export const getNote = cache(async (id: string): Promise<Note | null> => {
   if (!session?.user) {
     throw new UnauthorizedError()
   }
-
-  const note = await prisma.note.findUnique({
-    where: { id },
-  })
-
-  if (!note) return null
-  return parseNote(note)
+  const response = await apiFetch(`/api/notes/${id}`)
+  if (response.status === 404) return null
+  if (!response.ok) {
+    throw new Error('Failed to fetch note')
+  }
+  const data = await response.json()
+  return parseNote(data)
 })
