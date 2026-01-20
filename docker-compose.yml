@@ -28,16 +28,15 @@ services:
       - "8081:8080"
     volumes:
       - ./api:/workspace
-      - ./data/prisma:/workspace/data/prisma
+      - ./data/db:/workspace/data/db
       - ./data/uploads:/workspace/data/uploads
     environment:
       - TZ=Asia/Tokyo
       - APP_ENV=development
       - PORT=8080
-      - DATABASE_PATH=/workspace/data/prisma/app.db
+      - DATABASE_PATH=/workspace/data/db/app.db
       - UPLOADS_DIR=/workspace/data/uploads
       - JWT_SECRET=${JWT_SECRET}
-      - SESSION_SECRET=${SESSION_SECRET}
     tty: true
     stdin_open: true
     restart: unless-stopped

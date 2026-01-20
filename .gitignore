@@ -8,11 +8,11 @@ app/out/
 web/dist/
 
 # Application Data (Persistent)
-data/prisma/*.db
-data/prisma/*.db-journal
+data/db/*.db
+data/db/*.db-journal
 data/uploads/*
 !data/uploads/.gitignore
-!data/prisma/.gitignore
+!data/db/.gitignore
 
 # Environment Variables
 .env

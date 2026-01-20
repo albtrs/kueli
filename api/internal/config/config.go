@@ -35,11 +35,8 @@ func Load() (Config, error) {
 	uploadsDir := getEnv("UPLOADS_DIR", "./data/uploads")
 
 	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		jwtSecret = os.Getenv("SESSION_SECRET")
-	}
 	if strings.TrimSpace(jwtSecret) == "" {
-		return Config{}, errors.New("JWT_SECRET (or SESSION_SECRET) is required")
+		return Config{}, errors.New("JWT_SECRET is required")
 	}
 
 	accessTTL := parseDurationEnv("ACCESS_TOKEN_TTL", 15*time.Minute)
@@ -104,7 +101,7 @@ func buildSQLiteDSN() (string, error) {
 	}
 	path := strings.TrimSpace(os.Getenv("DATABASE_PATH"))
 	if path == "" {
-		path = "./data/prisma/app.db"
+		path = "./data/db/app.db"
 	}
 	return normalizeSQLiteDSN(path), nil
 }

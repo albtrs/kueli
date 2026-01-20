@@ -20,15 +20,14 @@ services:
       - 8080
     volumes:
       - ./data/uploads:/data/uploads
-      - ./data/prisma:/data/prisma
+      - ./data/db:/data/db
     environment:
       - TZ=Asia/Tokyo
       - APP_ENV=production
       - PORT=8080
-      - DATABASE_PATH=/data/prisma/app.db
+      - DATABASE_PATH=/data/db/app.db
       - UPLOADS_DIR=/data/uploads
       - JWT_SECRET=${JWT_SECRET}
-      - SESSION_SECRET=${SESSION_SECRET}
     restart: unless-stopped
     networks:
       - apps_net

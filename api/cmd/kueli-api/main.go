@@ -9,9 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"kueli-api/internal/auth"
 	"kueli-api/internal/config"
 	"kueli-api/internal/db"
+	dbmigrate "kueli-api/internal/migrate"
 	"kueli-api/internal/server"
 )
 
@@ -35,8 +35,8 @@ func main() {
 	}
 	defer database.Close()
 
-	if err := auth.EnsureRefreshTokenTable(context.Background(), database); err != nil {
-		slog.Error("failed to ensure refresh_tokens table", "error", err)
+	if err := dbmigrate.Up(database); err != nil {
+		slog.Error("database migration failed", "error", err)
 		os.Exit(1)
 	}
 

@@ -5,25 +5,28 @@
 ## 🎯 特徴
 
 - **Markdown編集**: CodeMirrorによる快適な編集体験
-- **タグ管理**: ハッシュタグで自動分類
+- **タグ・検索**: ハッシュタグ + 強力な検索式
+- **リンク機能**: WikiLink/バックリンク/OGPプレビュー
 - **画像アップロード**: ドラッグ&ドロップ対応
-- **セキュア認証**: iron-session によるセッション管理
-- **完全永続化**: SQLite + ファイルストレージ
-- **Docker完結**: ホスト環境を汚さない開発環境
+- **JWT認証**: access/refresh を httpOnly cookie で管理
+- **SQLite永続化**: DB + ファイルストレージ
+- **Docker完結**: ホスト環境を汚さない運用
 
 ## 🛠 技術スタック
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 16 (App Router), React 19, TypeScript |
+| Frontend | React SPA (Vite), TypeScript |
 | Editor | CodeMirror 6, ReactMarkdown |
 | Styling | Tailwind CSS 4, Radix UI |
-| Backend | Next.js Server Actions, Prisma ORM |
+| Backend | Go (chi) |
 | Database | SQLite |
-| Auth | iron-session |
-| Runtime | Node.js 22, Docker |
+| Auth | JWT (access/refresh cookies) |
+| Runtime | Docker, nginx (production) |
 
 ## 🚀 本番デプロイ
+
+旧 Next.js 環境からの移行は `PRODUCTION_MIGRATION.md` を参照してください。
 
 ### 1. クローンして環境変数を設定
 
@@ -31,32 +34,51 @@
 git clone https://github.com/albtrs/kueli.git
 cd kueli
 
-# .env作成（SESSION_SECRETは32文字以上）
-cat > .env << 'EOF'
-SESSION_SECRET="your-secret-key-at-least-32-characters-long"
-EOF
+cp .env.sample .env
+# .env を編集して JWT_SECRET などを設定
 ```
 
 ### 2. 起動
 
 ```bash
+docker network create apps_net || true
 docker compose -f docker-compose.production.yml up -d --build
 ```
 
-### 3. 初回セットアップ（DBマイグレーション＆管理者作成）
+### 3. リバースプロキシ
 
-```bash
-docker exec -it kueli npx prisma migrate deploy
-docker exec -it kueli node scripts/user-manage.js create admin yourpassword --admin
+本番では `/` を web (3000)、`/api` を api (8080) に振り分けます。
+
+```nginx
+location /api/ {
+  proxy_pass http://kueli-api:8080;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_set_header Authorization $http_authorization;
+}
+location / {
+  proxy_pass http://kueli-web:3000;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+}
 ```
 
-http://localhost:3000 にアクセス（nginxでリバプロ推奨）
+### 4. 初回データ
+
+- SQLite は `data/db/app.db` を参照します。
+- 旧版（Next/Prisma）の DB を持っている場合はそのまま配置すれば動きます。
+- `refresh_tokens` テーブルは API 起動時に自動作成されます。
 
 ### 管理
 
 ```bash
 # ログ
-docker logs kueli -f
+docker logs kueli-web -f
+docker logs kueli-api -f
 
 # 再起動
 docker compose -f docker-compose.production.yml restart
@@ -74,7 +96,6 @@ tar -czf backup-$(date +%Y%m%d).tar.gz data/
 # 更新
 git pull
 docker compose -f docker-compose.production.yml up -d --build
-docker exec -it kueli npx prisma migrate deploy  # スキーマ変更時のみ
 ```
 
 ## 🛠 開発環境
@@ -83,95 +104,67 @@ docker exec -it kueli npx prisma migrate deploy  # スキーマ変更時のみ
 # 開発用docker-composeを起動
 docker compose up -d
 
-# コンテナに入る
-docker exec -it kueli-app sh
-
-# 初回セットアップ（コンテナ内で実行）
-npm install
-npx prisma generate
-npx prisma db push
-npm run user:reset admin yourpassword
-npm run dev
-
-# ブラウザでアクセス
-# http://localhost:3001
+# Web: http://localhost:3001
+# API: http://localhost:8081/api/health
 ```
 
-## 👤 ユーザー管理
-
-```bash
-# コンテナ内で実行
-
-# ユーザー一覧
-npm run user:list
-
-# ユーザー作成
-npm run user:create <username> <password>
-npm run user:create <username> <password> -- --admin  # 管理者として
-
-# パスワード変更
-npm run user:password <username> <new-password>
-
-# ユーザー削除
-npm run user:delete <username>
-
-# 全ユーザーリセット（管理者1人だけにする）
-npm run user:reset                        # デフォルト: admin / password123456
-npm run user:reset <username> <password>  # カスタム指定
-```
-
-## 📂 プロジェクト構造
-
-```
-kueli/
-├── app/                    # Next.jsアプリケーション
-│   ├── prisma/            # Prismaスキーマ
-│   │   └── schema.prisma
-│   ├── scripts/           # ユーティリティスクリプト
-│   │   └── user-manage.ts # ユーザー管理CLI
-│   ├── src/
-│   │   ├── actions/       # Server Actions
-│   │   ├── app/           # App Router
-│   │   │   ├── api/       # API Routes
-│   │   │   ├── login/
-│   │   │   ├── notes/[id]/
-│   │   │   └── page.tsx   # Dashboard
-│   │   ├── components/    # React Components
-│   │   ├── lib/           # Utilities
-│   │   └── types/         # Type definitions
-│   └── public/uploads/    # → data/uploads (mounted)
-├── data/                  # 永続化データ（Git管理外）
-│   ├── prisma/app.db     # SQLite DB
-│   └── uploads/          # ユーザー画像
-├── docs/                 # ドキュメント
-├── .env                  # 環境変数（Git管理外）
-├── docker-compose.yml            # 開発環境用
-├── docker-compose.production.yml # 本番環境用
-├── Dockerfile                    # 開発用
-├── Dockerfile.production         # 本番用（マルチステージビルド）
-└── README.md
-```
-
-## 🔧 開発コマンド
+### 開発コマンド
 
 ```bash
 # ログ確認
-docker logs kueli-app -f
+docker logs kueli-web -f
+docker logs kueli-api -f
 
 # コンテナに入る
-docker exec -it kueli-app sh
-
-# コンテナ再起動
-docker compose restart
+docker exec -it kueli-web sh
+docker exec -it kueli-api sh
 
 # 停止
 docker compose down
 
 # データ完全削除
-docker compose down && rm -rf data/prisma/* data/uploads/*
+docker compose down && rm -rf data/db/* data/uploads/*
+```
 
-# Prisma Studio（DB GUI）
-docker exec -it kueli-app npx prisma studio
+### テスト（Go）
+
+```bash
+# docker で実行
+docker compose run --rm api go test ./...
+```
+
+## 👤 ユーザー管理
+
+- ユーザー情報は SQLite の `User` テーブルに保存されます。
+- 現状は CLI を同梱していないため、必要なら DB を直接編集してください。
+
+## 🗂 マイグレーション
+
+- API 起動時に自動で適用されます（golang-migrate）。
+- SQL は `api/migrations/` に追加します。
+- 既存DBにも適用できるよう、初期マイグレーションは `IF NOT EXISTS` を使用しています。
+
+## 📂 プロジェクト構造
+
+```
+kueli/
+├── api/                    # Go API
+│   ├── cmd/kueli-api
+│   ├── internal/
+│   ├── Dockerfile
+│   └── Dockerfile.production
+├── web/                    # React SPA (Vite)
+│   ├── src/
+│   ├── public/
+│   ├── nginx.conf
+│   ├── Dockerfile
+│   └── Dockerfile.production
+├── data/                   # 永続化データ（Git管理外）
+│   ├── db/app.db           # SQLite DB
+│   └── uploads/            # アップロード画像
+├── docker-compose.yml            # 開発環境用
+├── docker-compose.production.yml # 本番環境用
+└── README.md
 ```
 
 ## 💾 データ永続化
@@ -180,7 +173,7 @@ docker exec -it kueli-app npx prisma studio
 
 ```
 data/
-├── prisma/app.db    # SQLite データベース
+├── db/app.db        # SQLite データベース
 └── uploads/         # アップロード画像
 ```
 
@@ -193,7 +186,16 @@ tar -czf backup-$(date +%Y%m%d).tar.gz data/
 
 | 変数名 | 説明 |
 |--------|------|
-| `SESSION_SECRET` | セッション暗号化キー（32文字以上、必須） |
+| `JWT_SECRET` | JWT署名キー（必須） |
+| `DATABASE_PATH` | SQLiteファイルのパス（例: `./data/db/app.db`） |
+| `DATABASE_URL` | SQLite DSN（`file:` 付きでも可） |
+| `UPLOADS_DIR` | 画像保存先ディレクトリ |
+| `ACCESS_TOKEN_TTL` | access token TTL（デフォルト: 15m） |
+| `REFRESH_TOKEN_TTL` | refresh token TTL（デフォルト: 720h） |
+| `COOKIE_DOMAIN` | Cookie のドメイン設定 |
+| `COOKIE_SECURE` | Secure cookie を強制するか（true/false） |
+| `VITE_API_INTERNAL_ORIGIN` | 開発時の API プロキシ先（例: `http://api:8080`） |
+| `VITE_API_ORIGIN` | APIの外部URL（プロキシを使わない場合） |
 
 ## 📝 ライセンス
 
