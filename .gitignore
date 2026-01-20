@@ -24,6 +24,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Go build outputs (air)
+api/tmp/
+
 # OS
 .DS_Store
 Thumbs.db

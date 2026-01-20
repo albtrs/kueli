@@ -32,27 +32,27 @@ type tweetVideo struct {
 }
 
 type quotedTweetData struct {
-	ID     string      `json:"id"`
-	Text   string      `json:"text"`
-	User   tweetUser   `json:"user"`
+	ID     string       `json:"id"`
+	Text   string       `json:"text"`
+	User   tweetUser    `json:"user"`
 	Photos []tweetPhoto `json:"photos"`
-	Video  *tweetVideo `json:"video,omitempty"`
+	Video  *tweetVideo  `json:"video,omitempty"`
 }
 
 type tweetResponse struct {
-	ID         string           `json:"id"`
-	Text       string           `json:"text"`
-	User       tweetUser        `json:"user"`
-	Photos     []tweetPhoto     `json:"photos"`
-	Video      *tweetVideo      `json:"video,omitempty"`
+	ID          string           `json:"id"`
+	Text        string           `json:"text"`
+	User        tweetUser        `json:"user"`
+	Photos      []tweetPhoto     `json:"photos"`
+	Video       *tweetVideo      `json:"video,omitempty"`
 	QuotedTweet *quotedTweetData `json:"quotedTweet,omitempty"`
-	CreatedAt  string           `json:"createdAt"`
+	CreatedAt   string           `json:"createdAt"`
 }
 
 func (h *TweetHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id == "" {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Tweet ID is required"})
+		httpx.WriteError(w, httpx.BadRequest("Tweet ID is required"))
 		return
 	}
 
@@ -69,17 +69,17 @@ func (h *TweetHandler) Get(w http.ResponseWriter, r *http.Request) {
 	payload, err := tweet.Fetch(r.Context(), id)
 	if err != nil {
 		if err == tweet.ErrNotFound {
-			httpx.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Tweet not found"})
+			httpx.WriteError(w, httpx.NotFound("Tweet not found"))
 			return
 		}
-		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch tweet"})
+		httpx.WriteError(w, httpx.InternalServerError("Failed to fetch tweet"))
 		return
 	}
 
 	response := mapTweet(payload)
 	encoded, err := json.Marshal(response)
 	if err != nil {
-		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch tweet"})
+		httpx.WriteError(w, httpx.InternalServerError("Failed to fetch tweet"))
 		return
 	}
 

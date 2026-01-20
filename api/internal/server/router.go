@@ -5,10 +5,14 @@ import (
 	"net/http"
 	"time"
 
+	"kueli-api/internal/attachments"
 	"kueli-api/internal/auth"
+	"kueli-api/internal/backup"
 	"kueli-api/internal/cache"
 	"kueli-api/internal/config"
+	"kueli-api/internal/files"
 	"kueli-api/internal/handlers"
+	"kueli-api/internal/notes"
 	"kueli-api/internal/rate"
 
 	"github.com/go-chi/chi/v5"
@@ -23,18 +27,21 @@ func NewRouter(cfg config.Config, db *sql.DB) http.Handler {
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.Timeout(30 * time.Second))
 
+	authService := auth.NewService(db, cfg)
 	authHandler := &handlers.AuthHandler{
-		DB:      db,
+		Service: authService,
 		Config:  cfg,
 		Limiter: rate.NewLimiter(time.Minute),
 	}
-	notesHandler := &handlers.NotesHandler{DB: db}
-	filesHandler := &handlers.FilesHandler{UploadsDir: cfg.UploadsDir}
-	attachmentsHandler := &handlers.AttachmentsHandler{
-		DB:         db,
-		UploadsDir: cfg.UploadsDir,
-	}
-	backupHandler := &handlers.BackupHandler{DB: db}
+	notesStore := notes.NewStore(db)
+	notesService := notes.NewService(notesStore)
+	notesHandler := &handlers.NotesHandler{Service: notesService}
+	filesService := files.NewService(cfg.UploadsDir)
+	filesHandler := &handlers.FilesHandler{Service: filesService}
+	attachmentsService := attachments.NewService(db, cfg.UploadsDir)
+	attachmentsHandler := &handlers.AttachmentsHandler{Service: attachmentsService}
+	backupService := backup.NewService(db)
+	backupHandler := &handlers.BackupHandler{Service: backupService}
 
 	cacheStore := cache.New()
 	ogpHandler := &handlers.OGPHandler{Cache: cacheStore}

@@ -25,7 +25,7 @@ type ogpResponse struct {
 func (h *OGPHandler) Get(w http.ResponseWriter, r *http.Request) {
 	rawURL := r.URL.Query().Get("url")
 	if rawURL == "" {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "URL is required"})
+		httpx.WriteError(w, httpx.BadRequest("URL is required"))
 		return
 	}
 
@@ -39,9 +39,9 @@ func (h *OGPHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	data, err := ogp.Fetch(rawURL)
+	data, err := ogp.FetchWithContext(r.Context(), rawURL)
 	if err != nil {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		httpx.WriteError(w, httpx.BadRequest(err.Error()))
 		return
 	}
 
@@ -55,7 +55,7 @@ func (h *OGPHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	payload, err := json.Marshal(result)
 	if err != nil {
-		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch OGP data"})
+		httpx.WriteError(w, httpx.InternalServerError("Failed to fetch OGP data"))
 		return
 	}
 

@@ -8,27 +8,27 @@ import (
 const MaxFileSize = 50 * 1024 * 1024
 
 var AllowedFileTypes = map[string][]string{
-	"image/jpeg":                                       {".jpg", ".jpeg"},
-	"image/png":                                        {".png"},
-	"image/gif":                                        {".gif"},
-	"image/webp":                                       {".webp"},
-	"application/pdf":                                  {".pdf"},
-	"text/plain":                                       {".txt"},
-	"text/markdown":                                    {".md"},
-	"text/csv":                                         {".csv"},
-	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": {".docx"},
-	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":       {".xlsx"},
+	"image/jpeg":      {".jpg", ".jpeg"},
+	"image/png":       {".png"},
+	"image/gif":       {".gif"},
+	"image/webp":      {".webp"},
+	"application/pdf": {".pdf"},
+	"text/plain":      {".txt"},
+	"text/markdown":   {".md"},
+	"text/csv":        {".csv"},
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document":   {".docx"},
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         {".xlsx"},
 	"application/vnd.openxmlformats-officedocument.presentationml.presentation": {".pptx"},
-	"application/zip":                                  {".zip"},
-	"application/x-zip-compressed":                     {".zip"},
-	"video/mp4":                                        {".mp4"},
-	"video/webm":                                       {".webm"},
-	"video/quicktime":                                  {".mov"},
-	"audio/mpeg":                                       {".mp3"},
-	"audio/mp3":                                        {".mp3"},
-	"audio/wav":                                        {".wav"},
-	"audio/x-m4a":                                      {".m4a"},
-	"audio/ogg":                                        {".ogg"},
+	"application/zip":              {".zip"},
+	"application/x-zip-compressed": {".zip"},
+	"video/mp4":                    {".mp4"},
+	"video/webm":                   {".webm"},
+	"video/quicktime":              {".mov"},
+	"audio/mpeg":                   {".mp3"},
+	"audio/mp3":                    {".mp3"},
+	"audio/wav":                    {".wav"},
+	"audio/x-m4a":                  {".m4a"},
+	"audio/ogg":                    {".ogg"},
 }
 
 var ExtToMIME = map[string]string{
@@ -109,4 +109,17 @@ func CategoryFromMime(mime string) string {
 		return "document"
 	}
 	return "other"
+}
+
+func IsSafeFilename(name string) bool {
+	if name == "" {
+		return false
+	}
+	if strings.Contains(name, "..") {
+		return false
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return false
+	}
+	return true
 }

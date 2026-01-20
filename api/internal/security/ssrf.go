@@ -1,9 +1,11 @@
 package security
 
 import (
+	"context"
 	"net"
 	"net/url"
 	"strings"
+	"time"
 )
 
 type URLValidation struct {
@@ -12,6 +14,14 @@ type URLValidation struct {
 }
 
 func IsValidExternalURL(raw string) URLValidation {
+	return validateExternalURL(nil, raw)
+}
+
+func IsValidExternalURLWithContext(ctx context.Context, raw string) URLValidation {
+	return validateExternalURL(ctx, raw)
+}
+
+func validateExternalURL(ctx context.Context, raw string) URLValidation {
 	parsed, err := url.Parse(raw)
 	if err != nil {
 		return URLValidation{Valid: false, Reason: "Invalid URL format"}
@@ -22,32 +32,7 @@ func IsValidExternalURL(raw string) URLValidation {
 	}
 
 	host := strings.ToLower(parsed.Hostname())
-	if host == "" {
-		return URLValidation{Valid: false, Reason: "Invalid URL format"}
-	}
-
-	if isPrivateIP(host) {
-		return URLValidation{Valid: false, Reason: "Private IP addresses are not allowed"}
-	}
-
-	blocked := []string{
-		"localhost",
-		"localhost.localdomain",
-		"kubernetes.default",
-		"kubernetes.default.svc",
-	}
-
-	for _, pattern := range blocked {
-		if host == pattern {
-			return URLValidation{Valid: false, Reason: "Internal hostnames are not allowed"}
-		}
-	}
-
-	if strings.HasSuffix(host, ".local") {
-		return URLValidation{Valid: false, Reason: "Internal hostnames are not allowed"}
-	}
-
-	return URLValidation{Valid: true}
+	return validateHost(ctx, host)
 }
 
 func isPrivateIP(host string) bool {
@@ -121,4 +106,55 @@ func isPrivateIP(host string) bool {
 	}
 
 	return false
+}
+
+func validateHost(ctx context.Context, host string) URLValidation {
+	if host == "" {
+		return URLValidation{Valid: false, Reason: "Invalid URL format"}
+	}
+
+	if isPrivateIP(host) {
+		return URLValidation{Valid: false, Reason: "Private IP addresses are not allowed"}
+	}
+
+	blocked := []string{
+		"localhost",
+		"localhost.localdomain",
+		"kubernetes.default",
+		"kubernetes.default.svc",
+	}
+
+	for _, pattern := range blocked {
+		if host == pattern {
+			return URLValidation{Valid: false, Reason: "Internal hostnames are not allowed"}
+		}
+	}
+
+	if strings.HasSuffix(host, ".local") {
+		return URLValidation{Valid: false, Reason: "Internal hostnames are not allowed"}
+	}
+
+	if ctx == nil || net.ParseIP(strings.Trim(host, "[]")) != nil {
+		return URLValidation{Valid: true}
+	}
+
+	resolverCtx := ctx
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		resolverCtx, cancel = context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+	}
+
+	ips, err := net.DefaultResolver.LookupIPAddr(resolverCtx, host)
+	if err != nil {
+		return URLValidation{Valid: false, Reason: "Host could not be resolved"}
+	}
+
+	for _, ip := range ips {
+		if isPrivateIP(ip.IP.String()) {
+			return URLValidation{Valid: false, Reason: "Host resolves to a private IP address"}
+		}
+	}
+
+	return URLValidation{Valid: true}
 }

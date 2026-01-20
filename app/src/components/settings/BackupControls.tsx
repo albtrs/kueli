@@ -186,10 +186,28 @@ export function BackupControls() {
       
       const result = await response.json();
 
-      if (result.success) {
+      const failed = Array.isArray(result.failed) ? result.failed : [];
+      const skipped = Array.isArray(result.skipped) ? result.skipped : [];
+
+      if (failed.length > 0) {
+        const details = failed
+          .slice(0, 3)
+          .map((item: { filename?: string; reason?: string }) => {
+            const name = item.filename || 'unknown';
+            const reason = item.reason || 'unknown error';
+            return `${name}: ${reason}`;
+          })
+          .join(' / ');
+        const more = failed.length > 3 ? ` 他${failed.length - 3}件` : '';
+        showMessage(
+          'error',
+          `添付ファイルのインポートに失敗したファイルがあります: ${details}${more}`
+        );
+      } else if (result.success) {
+        const skippedInfo = skipped.length > 0 ? `、スキップ ${skipped.length}件` : '';
         showMessage(
           'success',
-          `添付ファイルインポート完了: ${result.totalImported}件`
+          `添付ファイルインポート完了: ${result.totalImported}件${skippedInfo}`
         );
       } else {
         showMessage('error', result.error || 'インポートに失敗しました');

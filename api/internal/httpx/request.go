@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"encoding/json"
 	"net"
 	"net/http"
 	"strings"
@@ -25,4 +26,11 @@ func ClientIP(r *http.Request) string {
 		return host
 	}
 	return r.RemoteAddr
+}
+
+func DecodeJSON(r *http.Request, payload any) error {
+	if err := json.NewDecoder(r.Body).Decode(payload); err != nil {
+		return BadRequest("Invalid request body").WithCause(err)
+	}
+	return nil
 }

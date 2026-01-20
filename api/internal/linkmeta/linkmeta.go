@@ -61,7 +61,7 @@ func ExtractTweetID(rawURL string) string {
 }
 
 func FetchAndSave(ctx context.Context, db *sql.DB, rawURL string) error {
-	validation := security.IsValidExternalURL(rawURL)
+	validation := security.IsValidExternalURLWithContext(ctx, rawURL)
 	if !validation.Valid {
 		if err := updateError(ctx, db, rawURL, validation.Reason); err != nil {
 			return err
@@ -111,7 +111,7 @@ func fetchMetadata(ctx context.Context, rawURL, urlType string) (metadataUpdate,
 	if urlType == TypeTwitter {
 		return fetchTwitter(ctx, rawURL)
 	}
-	ogpData, err := ogp.Fetch(rawURL)
+	ogpData, err := ogp.FetchWithContext(ctx, rawURL)
 	if err != nil {
 		return metadataUpdate{}, err
 	}

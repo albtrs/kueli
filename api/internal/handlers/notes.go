@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -15,7 +14,7 @@ import (
 )
 
 type NotesHandler struct {
-	DB *sql.DB
+	Service *notes.Service
 }
 
 type notesPageResponse struct {
@@ -37,9 +36,9 @@ func (h *NotesHandler) List(w http.ResponseWriter, r *http.Request) {
 		SortOrder:       query.Get("sort"),
 	}
 
-	items, nextCursor, hasMore, err := notes.List(r.Context(), h.DB, opts)
+	items, nextCursor, hasMore, err := h.Service.List(r.Context(), opts)
 	if err != nil {
-		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		httpx.WriteError(w, httpx.InternalServerError(""))
 		return
 	}
 
@@ -53,17 +52,17 @@ func (h *NotesHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *NotesHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing note id"})
+		httpx.WriteError(w, httpx.BadRequest("Missing note id"))
 		return
 	}
 
-	note, err := notes.Get(r.Context(), h.DB, id)
+	note, err := h.Service.Get(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			httpx.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Note not found"})
+			httpx.WriteError(w, httpx.NotFound("Note not found"))
 			return
 		}
-		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		httpx.WriteError(w, httpx.InternalServerError(""))
 		return
 	}
 
@@ -72,14 +71,14 @@ func (h *NotesHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 func (h *NotesHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var payload notes.NotePayload
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+	if err := httpx.DecodeJSON(r, &payload); err != nil {
+		httpx.WriteError(w, err)
 		return
 	}
 
-	note, err := notes.Create(r.Context(), h.DB, payload)
+	note, err := h.Service.Create(r.Context(), payload)
 	if err != nil {
-		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		httpx.WriteError(w, httpx.InternalServerError(""))
 		return
 	}
 
@@ -89,23 +88,23 @@ func (h *NotesHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *NotesHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing note id"})
+		httpx.WriteError(w, httpx.BadRequest("Missing note id"))
 		return
 	}
 
 	var payload notes.NotePayload
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+	if err := httpx.DecodeJSON(r, &payload); err != nil {
+		httpx.WriteError(w, err)
 		return
 	}
 
-	note, err := notes.Update(r.Context(), h.DB, id, payload)
+	note, err := h.Service.Update(r.Context(), id, payload)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			httpx.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Note not found"})
+			httpx.WriteError(w, httpx.NotFound("Note not found"))
 			return
 		}
-		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		httpx.WriteError(w, httpx.InternalServerError(""))
 		return
 	}
 
@@ -115,12 +114,12 @@ func (h *NotesHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *NotesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing note id"})
+		httpx.WriteError(w, httpx.BadRequest("Missing note id"))
 		return
 	}
 
-	if err := notes.Delete(r.Context(), h.DB, id); err != nil {
-		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+	if err := h.Service.Delete(r.Context(), id); err != nil {
+		httpx.WriteError(w, httpx.InternalServerError(""))
 		return
 	}
 
@@ -130,17 +129,17 @@ func (h *NotesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 func (h *NotesHandler) TogglePin(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing note id"})
+		httpx.WriteError(w, httpx.BadRequest("Missing note id"))
 		return
 	}
 
-	note, err := notes.TogglePin(r.Context(), h.DB, id)
+	note, err := h.Service.TogglePin(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			httpx.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Note not found"})
+			httpx.WriteError(w, httpx.NotFound("Note not found"))
 			return
 		}
-		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		httpx.WriteError(w, httpx.InternalServerError(""))
 		return
 	}
 
@@ -150,17 +149,17 @@ func (h *NotesHandler) TogglePin(w http.ResponseWriter, r *http.Request) {
 func (h *NotesHandler) ToggleArchive(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing note id"})
+		httpx.WriteError(w, httpx.BadRequest("Missing note id"))
 		return
 	}
 
-	note, err := notes.ToggleArchive(r.Context(), h.DB, id)
+	note, err := h.Service.ToggleArchive(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			httpx.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Note not found"})
+			httpx.WriteError(w, httpx.NotFound("Note not found"))
 			return
 		}
-		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		httpx.WriteError(w, httpx.InternalServerError(""))
 		return
 	}
 
@@ -170,17 +169,17 @@ func (h *NotesHandler) ToggleArchive(w http.ResponseWriter, r *http.Request) {
 func (h *NotesHandler) Duplicate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing note id"})
+		httpx.WriteError(w, httpx.BadRequest("Missing note id"))
 		return
 	}
 
-	note, err := notes.Duplicate(r.Context(), h.DB, id)
+	note, err := h.Service.Duplicate(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			httpx.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Note not found"})
+			httpx.WriteError(w, httpx.NotFound("Note not found"))
 			return
 		}
-		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		httpx.WriteError(w, httpx.InternalServerError(""))
 		return
 	}
 
@@ -190,13 +189,13 @@ func (h *NotesHandler) Duplicate(w http.ResponseWriter, r *http.Request) {
 func (h *NotesHandler) Versions(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing note id"})
+		httpx.WriteError(w, httpx.BadRequest("Missing note id"))
 		return
 	}
 
-	versions, err := notes.ListVersions(r.Context(), h.DB, id)
+	versions, err := h.Service.ListVersions(r.Context(), id)
 	if err != nil {
-		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		httpx.WriteError(w, httpx.InternalServerError(""))
 		return
 	}
 
@@ -206,17 +205,17 @@ func (h *NotesHandler) Versions(w http.ResponseWriter, r *http.Request) {
 func (h *NotesHandler) Version(w http.ResponseWriter, r *http.Request) {
 	versionID := chi.URLParam(r, "id")
 	if versionID == "" {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing version id"})
+		httpx.WriteError(w, httpx.BadRequest("Missing version id"))
 		return
 	}
 
-	version, err := notes.GetVersion(r.Context(), h.DB, versionID)
+	version, err := h.Service.GetVersion(r.Context(), versionID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			httpx.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Version not found"})
+			httpx.WriteError(w, httpx.NotFound("Version not found"))
 			return
 		}
-		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		httpx.WriteError(w, httpx.InternalServerError(""))
 		return
 	}
 
@@ -226,17 +225,17 @@ func (h *NotesHandler) Version(w http.ResponseWriter, r *http.Request) {
 func (h *NotesHandler) RestoreVersion(w http.ResponseWriter, r *http.Request) {
 	versionID := chi.URLParam(r, "id")
 	if versionID == "" {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing version id"})
+		httpx.WriteError(w, httpx.BadRequest("Missing version id"))
 		return
 	}
 
-	note, err := notes.RestoreVersion(r.Context(), h.DB, versionID)
+	note, err := h.Service.RestoreVersion(r.Context(), versionID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			httpx.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Version not found"})
+			httpx.WriteError(w, httpx.NotFound("Version not found"))
 			return
 		}
-		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		httpx.WriteError(w, httpx.InternalServerError(""))
 		return
 	}
 
@@ -246,12 +245,12 @@ func (h *NotesHandler) RestoreVersion(w http.ResponseWriter, r *http.Request) {
 func (h *NotesHandler) DeleteVersion(w http.ResponseWriter, r *http.Request) {
 	versionID := chi.URLParam(r, "id")
 	if versionID == "" {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing version id"})
+		httpx.WriteError(w, httpx.BadRequest("Missing version id"))
 		return
 	}
 
-	if err := notes.DeleteVersion(r.Context(), h.DB, versionID); err != nil {
-		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+	if err := h.Service.DeleteVersion(r.Context(), versionID); err != nil {
+		httpx.WriteError(w, httpx.InternalServerError(""))
 		return
 	}
 
@@ -261,17 +260,17 @@ func (h *NotesHandler) DeleteVersion(w http.ResponseWriter, r *http.Request) {
 func (h *NotesHandler) Backlinks(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing note id"})
+		httpx.WriteError(w, httpx.BadRequest("Missing note id"))
 		return
 	}
 
-	results, err := notes.Backlinks(r.Context(), h.DB, id)
+	results, err := h.Service.Backlinks(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			httpx.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "Note not found"})
+			httpx.WriteError(w, httpx.NotFound("Note not found"))
 			return
 		}
-		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		httpx.WriteError(w, httpx.InternalServerError(""))
 		return
 	}
 
