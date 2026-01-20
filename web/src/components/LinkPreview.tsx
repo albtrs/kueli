@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { ExternalLink, Loader2 } from 'lucide-react';
 import { extractYouTubeVideoId, extractTweetId } from '@/lib/media-utils';
 import { TweetCard } from '@/components/TweetCard';
+import { apiFetch } from '@/lib/api';
 
 interface OGPData {
   title?: string;
@@ -54,13 +55,13 @@ function OGPPreview({ href }: { href: string }) {
   useEffect(() => {
     const fetchOGP = async () => {
       try {
-        const response = await fetch(`/api/ogp?url=${encodeURIComponent(href)}`);
-        if (response.ok) {
-          const data = await response.json();
-          setOgpData(data);
-        } else {
+        const response = await apiFetch(`/api/ogp?url=${encodeURIComponent(href)}`);
+        if (!response.ok) {
           setError(true);
+          return;
         }
+        const data = await response.json();
+        setOgpData(data);
       } catch {
         setError(true);
       } finally {

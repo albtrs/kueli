@@ -7,6 +7,7 @@ import { fetchNotesPage, togglePin, toggleArchive, deleteNote, duplicateNote } f
 import { stripMarkdown } from '@/lib/utils';
 import { extractYouTubeThumbnail, extractTweetId, extractFirstExternalLink } from '@/lib/media-utils';
 import { extractFirstMedia } from '@/lib/file-utils';
+import { apiFetch } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import {
   DropdownMenu,
@@ -204,29 +205,49 @@ function NoteCard({
   // OGP画像を取得
   useEffect(() => {
     if (!externalLink) return;
-    
-    fetch(`/api/ogp?url=${encodeURIComponent(externalLink)}`)
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data?.image) {
+
+    let isCancelled = false;
+    const fetchOgp = async () => {
+      try {
+        const res = await apiFetch(`/api/ogp?url=${encodeURIComponent(externalLink)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!isCancelled && data?.image) {
           setOgpImage(data.image);
         }
-      })
-      .catch(() => {})
+      } catch {
+        // ignore
+      }
+    };
+
+    fetchOgp();
+    return () => {
+      isCancelled = true;
+    };
   }, [externalLink]);
 
   // Twitterの画像を取得
   useEffect(() => {
     if (!tweetId) return;
-    
-    fetch(`/api/tweet?id=${tweetId}`)
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data?.image) {
+
+    let isCancelled = false;
+    const fetchTweet = async () => {
+      try {
+        const res = await apiFetch(`/api/tweet?id=${tweetId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!isCancelled && data?.image) {
           setTweetImage(data.image);
         }
-      })
-      .catch(() => {});
+      } catch {
+        // ignore
+      }
+    };
+
+    fetchTweet();
+    return () => {
+      isCancelled = true;
+    };
   }, [tweetId]);
   
   const hasMedia = media !== null;

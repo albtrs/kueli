@@ -14,11 +14,18 @@ import { Loader2 } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
 import { useSession } from '@/hooks/useSession'
 
+function normalizeRedirectTarget(target: string | null) {
+  if (!target) return '/'
+  if (!target.startsWith('/')) return '/'
+  if (target.startsWith('//')) return '/'
+  return target
+}
+
 function useRedirectTarget() {
   const location = useLocation()
   return useMemo(() => {
     const params = new URLSearchParams(location.search)
-    return params.get('from') || '/'
+    return normalizeRedirectTarget(params.get('from'))
   }, [location.search])
 }
 
@@ -33,9 +40,9 @@ export function LoginPage() {
 
   useEffect(() => {
     if (status === 'authenticated') {
-      navigate('/', { replace: true })
+      navigate(redirectTo, { replace: true })
     }
-  }, [status, navigate])
+  }, [status, navigate, redirectTo])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

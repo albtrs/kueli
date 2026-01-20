@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 import { ImageGalleryModal } from './ui/image-gallery-modal';
 import type { GalleryImage } from './ui/image-gallery-modal';
+import { apiFetch } from '@/lib/api';
 
 // APIから返されるツイートデータの型
 interface TweetUser {
@@ -205,7 +206,7 @@ export function TweetCard({ tweetId, tweetUrl, isFullSizeImages = false }: Tweet
   useEffect(() => {
     const fetchTweet = async () => {
       try {
-        const res = await fetch(`/api/tweet?id=${tweetId}`);
+        const res = await apiFetch(`/api/tweet?id=${tweetId}`);
         if (!res.ok) throw new Error('Failed to fetch');
         const data = await res.json();
         setTweet(data);

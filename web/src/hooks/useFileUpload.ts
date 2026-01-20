@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { saveNote as saveNoteAction } from '@/api/notes';
 import type { Note } from '@/lib/types';
+import { apiFetch } from '@/lib/api';
 
 interface UploadResult {
   url: string | null;
@@ -26,7 +27,7 @@ export function useFileUpload({ note, onNoteUpdate }: UseFileUploadOptions) {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('/api/upload', {
+      const response = await apiFetch('/api/upload', {
         method: 'POST',
         body: formData,
       });

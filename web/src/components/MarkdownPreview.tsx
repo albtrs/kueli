@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -19,7 +20,16 @@ interface MarkdownPreviewProps {
 }
 
 // #タグをリンク+ハイライトに変換する関数
-function processHashtags(children: React.ReactNode): React.ReactNode {
+function shouldHandleInternalNavigation(event: React.MouseEvent<HTMLAnchorElement>) {
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return false;
+  if (event.button !== 0) return false;
+  return true;
+}
+
+function processHashtags(
+  children: React.ReactNode,
+  onNavigate?: (href: string) => void
+): React.ReactNode {
   if (typeof children === 'string') {
     const parts = children.split(/(#[\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+)/g);
     if (parts.length === 1) return children;
@@ -27,11 +37,17 @@ function processHashtags(children: React.ReactNode): React.ReactNode {
     return parts.map((part, index) => {
       if (part.match(/^#[\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+$/)) {
         const tag = part.slice(1); // # を除去
+        const href = `/?tag=${encodeURIComponent(tag)}`;
         return (
           <a
             key={index}
-            href={`/?tag=${encodeURIComponent(tag)}`}
+            href={href}
             className="inline-block bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded text-sm font-medium hover:bg-blue-200 dark:hover:bg-blue-800/50 transition-colors"
+            onClick={(event) => {
+              if (!onNavigate || !shouldHandleInternalNavigation(event)) return;
+              event.preventDefault();
+              onNavigate(href);
+            }}
           >
             {part}
           </a>
@@ -44,7 +60,7 @@ function processHashtags(children: React.ReactNode): React.ReactNode {
   if (Array.isArray(children)) {
     return children.map((child, index) => {
       if (typeof child === 'string') {
-        return <span key={index}>{processHashtags(child)}</span>;
+        return <span key={index}>{processHashtags(child, onNavigate)}</span>;
       }
       return child;
     });
@@ -59,6 +75,7 @@ function processHashtags(children: React.ReactNode): React.ReactNode {
  * - remark-breaks: 改行を<br>に変換
  */
 export function MarkdownPreview({ content, permalinks, isFullSizeImages = false }: MarkdownPreviewProps) {
+  const navigate = useNavigate();
   // 画像ギャラリー用の状態
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
@@ -89,6 +106,20 @@ export function MarkdownPreview({ content, permalinks, isFullSizeImages = false 
     setGalleryIndex(index);
     setGalleryOpen(true);
   }, []);
+
+  const handleInternalNavigate = useCallback((href: string) => {
+    navigate(href);
+  }, [navigate]);
+
+  const handleInternalClick = useCallback((
+    event: React.MouseEvent<HTMLAnchorElement>,
+    href?: string
+  ) => {
+    if (!href) return;
+    if (!shouldHandleInternalNavigation(event)) return;
+    event.preventDefault();
+    handleInternalNavigate(href);
+  }, [handleInternalNavigate]);
 
   // カスタムMarkdownレンダラー
   const markdownComponents: any = useMemo(() => ({
@@ -142,7 +173,7 @@ export function MarkdownPreview({ content, permalinks, isFullSizeImages = false 
 
     // --- 本文 ---
     p: ({ children }: any) => (
-      <p className="leading-7 mb-3">{processHashtags(children)}</p>
+      <p className="leading-7 mb-3">{processHashtags(children, handleInternalNavigate)}</p>
     ),
 
     // --- リスト ---
@@ -242,6 +273,8 @@ export function MarkdownPreview({ content, permalinks, isFullSizeImages = false 
       // Wikiリンクの場合（remark-wiki-linkが付与するクラス）
       const isWikiLink = className?.includes('internal');
       const isNewWikiLink = className?.includes('new');
+      const isExternal = href?.startsWith('http://') || href?.startsWith('https://');
+      const isInternal = href?.startsWith('/');
       
       if (isWikiLink) {
         return (
@@ -251,15 +284,13 @@ export function MarkdownPreview({ content, permalinks, isFullSizeImages = false 
               ? 'text-orange-500 hover:text-orange-600 hover:underline cursor-pointer' 
               : 'text-blue-500 hover:text-blue-600 hover:underline cursor-pointer'
             }
+            onClick={isInternal ? (event) => handleInternalClick(event, href) : undefined}
             {...props}
           >
             {children}
           </a>
         );
       }
-      
-      // 外部リンクの場合はプレビューを表示
-      const isExternal = href?.startsWith('http://') || href?.startsWith('https://');
       
       return (
         <>
@@ -268,6 +299,7 @@ export function MarkdownPreview({ content, permalinks, isFullSizeImages = false 
             target={isExternal ? '_blank' : undefined}
             rel={isExternal ? 'noopener noreferrer' : undefined}
             className="text-blue-500 hover:text-blue-600 hover:underline cursor-pointer"
+            onClick={!isExternal && isInternal ? (event) => handleInternalClick(event, href) : undefined}
             {...props}
           >
             {children}
@@ -292,7 +324,7 @@ export function MarkdownPreview({ content, permalinks, isFullSizeImages = false 
       }
       return <input type={type} {...props} />;
     },
-  }), [permalinks, images, handleImageClick, isFullSizeImages]);
+  }), [permalinks, images, handleImageClick, isFullSizeImages, handleInternalNavigate, handleInternalClick]);
 
   // remarkWikiLink の設定
   const wikiLinkOptions = useMemo(() => ({

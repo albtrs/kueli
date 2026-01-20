@@ -1,8 +1,9 @@
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useSession } from '@/hooks/useSession'
 
 export function RequireAuth() {
   const { status } = useSession()
+  const location = useLocation()
 
   if (status === 'loading') {
     return (
@@ -13,7 +14,8 @@ export function RequireAuth() {
   }
 
   if (status === 'unauthenticated') {
-    return <Navigate to="/login" replace />
+    const from = `${location.pathname}${location.search}`
+    return <Navigate to={`/login?from=${encodeURIComponent(from)}`} replace />
   }
 
   return <Outlet />
