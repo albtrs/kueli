@@ -5,6 +5,7 @@ app/node_modules/
 # Next.js
 app/.next/
 app/out/
+web/dist/
 
 # Application Data (Persistent)
 data/prisma/*.db

@@ -1,31 +1,14 @@
 services:
-  kueli:
+  kueli-web:
     build:
-      context: .
+      context: ./web
       dockerfile: Dockerfile.production
-    container_name: kueli
+    container_name: kueli-web
     expose:
       - 3000
-    volumes:
-      # データ永続化のみマウント（コードはイメージに含まれる）
-      - ./data/uploads:/app/public/uploads
-      - ./data/prisma:/app/prisma/db
     environment:
       - TZ=Asia/Tokyo
-      - NODE_ENV=production
-      - DATABASE_URL=file:/app/prisma/db/app.db
-      - SESSION_SECRET=${SESSION_SECRET}
-      - API_INTERNAL_ORIGIN=http://kueli-api:8080
     restart: unless-stopped
-    # ヘルスチェック
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/login"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    
-    # リバプロで使用するネットワークに接続
     networks:
       - apps_net
   kueli-api:
