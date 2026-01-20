@@ -53,7 +53,7 @@ func EncodeJSONList(values []string) string {
 func ExtractAllUrls(content string) []string {
 	urls := make(map[string]struct{})
 
-	markdownPattern := regexp.MustCompile(`\\[[^\\]]*\\]\\((https?:\\/\\/[^)]+)\\)`)
+	markdownPattern := regexp.MustCompile(`\[[^\]]*\]\((https?://[^)]+)\)`)
 	for _, match := range markdownPattern.FindAllStringSubmatch(content, -1) {
 		if len(match) < 2 {
 			continue
@@ -63,7 +63,7 @@ func ExtractAllUrls(content string) []string {
 		}
 	}
 
-	plainPattern := regexp.MustCompile(`https?:\\/\\/[^\\s<>\\[\\]()]+`)
+	plainPattern := regexp.MustCompile(`https?://[^\s<>\[\]()]+`)
 	for _, match := range plainPattern.FindAllString(content, -1) {
 		if normalized := normalizeURL(match); normalized != "" {
 			urls[normalized] = struct{}{}
