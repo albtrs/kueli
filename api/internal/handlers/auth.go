@@ -75,9 +75,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			Username: result.User.Username,
 			IsAdmin:  result.User.IsAdmin,
 		},
-		"accessToken": result.AccessToken,
-		"tokenType":   "Bearer",
-		"expiresIn":   int(h.Config.AccessTokenTTL.Seconds()),
+		"tokenType": "Bearer",
+		"expiresIn": int(h.Config.AccessTokenTTL.Seconds()),
 	})
 }
 
@@ -102,9 +101,8 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	auth.SetAccessCookie(w, result.AccessToken, result.AccessExpiresAt, h.Config)
 
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"accessToken": result.AccessToken,
-		"tokenType":   "Bearer",
-		"expiresIn":   int(h.Config.AccessTokenTTL.Seconds()),
+		"tokenType": "Bearer",
+		"expiresIn": int(h.Config.AccessTokenTTL.Seconds()),
 	})
 }
 

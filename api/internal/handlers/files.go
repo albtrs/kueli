@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"kueli-api/internal/auth"
 	"kueli-api/internal/files"
 	"kueli-api/internal/httpx"
 )
@@ -65,6 +66,11 @@ func (h *FilesHandler) Upload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *FilesHandler) Serve(w http.ResponseWriter, r *http.Request, filename string) {
+	if _, ok := auth.UserFromContext(r.Context()); !ok {
+		httpx.WriteError(w, httpx.Unauthorized(""))
+		return
+	}
+
 	data, err := h.Service.ServeFile(filename)
 	if err != nil {
 		switch err {
@@ -80,7 +86,8 @@ func (h *FilesHandler) Serve(w http.ResponseWriter, r *http.Request, filename st
 
 	headers := w.Header()
 	headers.Set("Content-Type", data.MimeType)
-	headers.Set("Cache-Control", "public, max-age=31536000, immutable")
+	headers.Set("Cache-Control", "private, max-age=31536000, immutable")
+	headers.Set("Vary", "Authorization, Cookie")
 	headers.Set("X-Content-Type-Options", "nosniff")
 
 	ext := strings.ToLower(filepath.Ext(data.Filename))
