@@ -67,6 +67,19 @@ location / {
 }
 ```
 
+### 3.1 Cloudflare キャッシュ設定
+
+Cloudflare を使っている場合、`/api/files/` は必ずキャッシュをバイパスしてください。
+
+方法1：Cache Rulesでパス一致 → Bypass cache（おすすめ）
+Cloudflare Dashboard → Rules → Cache Rules → Create rule
+条件（Expression）
+Field: URI Path
+Operator: starts with
+Value: /api/files/
+Action / Cache eligibility を Bypass cache にする
+これで /api/files/ 配下にマッチしたリクエストは Cloudflare でキャッシュされません。
+
 ### 4. 初回データ
 
 - SQLite は `data/db/app.db` を参照します。

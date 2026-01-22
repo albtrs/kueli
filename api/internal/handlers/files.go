@@ -86,7 +86,7 @@ func (h *FilesHandler) Serve(w http.ResponseWriter, r *http.Request, filename st
 
 	headers := w.Header()
 	headers.Set("Content-Type", data.MimeType)
-	headers.Set("Cache-Control", "private, max-age=31536000, immutable")
+	headers.Set("Cache-Control", "no-store")
 	headers.Set("Vary", "Authorization, Cookie")
 	headers.Set("X-Content-Type-Options", "nosniff")
 
