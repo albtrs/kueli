@@ -1,7 +1,7 @@
 # Kueli - Personal Note-Taking App
 
-シンプルで高速な個人用Markdownメモアプリ
-ほとんどAI駆動開発で実装しました
+シンプルな個人用Markdownメモアプリです。  
+**AI駆動開発で実装しました。**
 
 ## 🎯 特徴
 
