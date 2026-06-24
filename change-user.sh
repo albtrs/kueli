@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.production.yml}"
-SERVICE="${SERVICE:-kueli-api}"
+if [[ $# -lt 1 ]]; then
+	echo "usage: ./change-user.sh <container-name> [kueli-admin args...]" >&2
+	exit 1
+fi
 
-cd "$SCRIPT_DIR"
+container_name="$1"
+shift
 
-exec docker compose -f "$COMPOSE_FILE" run --rm --entrypoint /kueli-admin "$SERVICE" "$@"
+exec docker exec "$container_name" /kueli-admin "$@"

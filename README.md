@@ -150,7 +150,15 @@ docker compose run --rm api go test ./...
 ## 👤 ユーザー管理
 
 - ユーザー情報は SQLite の `User` テーブルに保存されます。
-- 現状は CLI を同梱していないため、必要なら DB を直接編集してください。
+- ユーザー名やパスワードは `change-user.sh` で変更できます。
+
+```bash
+# 例: kueli-api-demo コンテナ内の albtrs を demouser / 新しいパスワードに変更
+./change-user.sh kueli-api-demo --username admin --new-username demouser --password 'new-password'
+```
+
+- 第1引数は対象コンテナ名です（例: `kueli-api`, `kueli-api-demo`）。
+- 変更後は対象ユーザーの refresh token も失効します。
 
 ## 🗂 マイグレーション
 
