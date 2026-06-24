@@ -122,6 +122,17 @@ WHERE token_hash = ? AND revoked_at IS NULL`,
 	return err
 }
 
+func RevokeRefreshTokensByUserID(ctx context.Context, db execer, userID int) error {
+	_, err := db.ExecContext(ctx, `
+UPDATE refresh_tokens
+SET revoked_at = ?, replaced_by = NULL
+WHERE user_id = ? AND revoked_at IS NULL`,
+		time.Now().UTC().Format(time.RFC3339Nano),
+		userID,
+	)
+	return err
+}
+
 func nullTimeToString(value sql.NullTime) any {
 	if value.Valid {
 		return value.Time.UTC().Format(time.RFC3339Nano)
